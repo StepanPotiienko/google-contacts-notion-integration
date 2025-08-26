@@ -49,5 +49,26 @@ def list_ten_contacts():
     print(err)
 
 
+
+def check_for_edited_contacts():
+  # TODO
+  pass
+
+
+def connect_to_notion():
+  # TODO
+  pass
+
+
+def connect_to_database():
+  # TODO
+  pass
+
+
+def add_item(database: str):
+  # TODO
+  pass
+
+
 if __name__ == "__main__":
-  main()
+  list_ten_contacts()
