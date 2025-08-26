@@ -13,6 +13,9 @@ SYNC_TOKEN_FILE = "sync_token.txt"
 with open('notion_api.json', 'r') as file:
   notion_token = json.load(file)["token"]
 
+if notion_token == "":
+    print("ERROR: Notion token is not valid.")
+
 NOTION_CLIENT = Client(auth=notion_token)
 
 def get_credentials():
