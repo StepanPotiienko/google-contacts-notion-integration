@@ -16,25 +16,25 @@ SYNC_TOKEN_FILE = "sync_token.txt"
 
 def get_credentials():
     """ Grab credentials from Google API, and write them to a file. """
-    creds = None
+    google_creds = None
     if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+        google_creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if not google_creds or not google_creds.valid:
+        if google_creds and google_creds.expired and google_creds.refresh_token:
+            google_creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
                 "credentials.json", SCOPES
             )
-            creds = flow.run_local_server(port=0)
+            google_creds = flow.run_local_server(port=0)
         with open("token.json", "w", encoding="UTF-8") as token:
-            token.write(creds.to_json())
-    return creds
+            token.write(google_creds.to_json())
+    return google_creds
 
 
 def load_sync_token():
     """ Loads sync token from a file. """
-    # TODO: Merge load_sync_token() and save_sync_token() into one function.
+    # FIXME: Merge load_sync_token() and save_sync_token() into one function. # pylint: disable=fixme
     if os.path.exists(SYNC_TOKEN_FILE):
         with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
             return f.read().strip()
@@ -47,11 +47,11 @@ def save_sync_token(token: str):
         f.write(token)
 
 
-def full_sync(service):
+def full_sync(sync_service):
     """Perform a full sync and store the sync token."""
     print("Performing full sync...")
     results = (
-        service.people()
+        sync_service.people()
         .connections()
         .list(
             resourceName="people/me",
@@ -66,7 +66,7 @@ def full_sync(service):
 
     while "nextPageToken" in results:
         results = (
-            service.people()
+            sync_service.people()
             .connections()
             .list(
                 resourceName="people/me",
@@ -79,22 +79,22 @@ def full_sync(service):
         for person in results.get("connections", []):
             print_contact("Initial sync", person)
 
-    sync_token = results.get("nextSyncToken")
-    if sync_token:
-        save_sync_token(sync_token)
+    next_sync_token = results.get("nextSyncToken")
+    if next_sync_token:
+        save_sync_token(next_sync_token)
 
 
-def incremental_sync(service, sync_token):
+def incremental_sync(sync_service, google_sync_token):
     """Fetch changes since last sync."""
     print("Checking for changes...")
     try:
         results = (
-            service.people()
+            sync_service.people()
             .connections()
             .list(
                 resourceName="people/me",
                 personFields="metadata,names,emailAddresses",
-                syncToken=sync_token,
+                syncToken=google_sync_token,
             )
             .execute()
         )
@@ -105,12 +105,12 @@ def incremental_sync(service, sync_token):
 
         while "nextPageToken" in results:
             results = (
-                service.people()
+                sync_service.people()
                 .connections()
                 .list(
                     resourceName="people/me",
                     personFields="metadata,names,emailAddresses",
-                    syncToken=sync_token,
+                    syncToken=google_sync_token,
                     pageToken=results["nextPageToken"],
                 )
                 .execute()
@@ -126,7 +126,7 @@ def incremental_sync(service, sync_token):
     except HttpError as e:
         if e.resp.status == 410:
             print("Sync token expired. Running full sync...")
-            full_sync(service)
+            full_sync(sync_service)
         else:
             raise
 
@@ -142,7 +142,7 @@ def handle_person(person):
 
 def print_contact(prefix, person):
     """ Nicely outputs contact info. """
-    # TODO: Add contacts to a list to then compare with tasks list.
+    # FIXME: Add contacts to a list to then compare with tasks list. # pylint: disable=fixme
     # This way I can check if the task has already been created.
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
