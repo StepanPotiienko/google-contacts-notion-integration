@@ -14,6 +14,9 @@ SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
 
 
+# FIXME: Add contacts with tag 'Lead' # pylint: disable=fixme
+contacts_list = []
+
 def get_credentials():
     """ Grab credentials from Google API, and write them to a file. """
     google_creds = None
@@ -59,7 +62,7 @@ def full_sync(sync_service):
     )
 
     for person in results.get("connections", []):
-        print_contact("Initial sync", person)
+        get_contacts_list(person)
 
     while "nextPageToken" in results:
         results = (
@@ -74,7 +77,7 @@ def full_sync(sync_service):
             .execute()
         )
         for person in results.get("connections", []):
-            print_contact("Initial sync", person)
+            get_contacts_list(person)
 
     next_sync_token = results.get("nextSyncToken")
     if next_sync_token:
@@ -134,19 +137,17 @@ def handle_person(person):
     if metadata.get("deleted"):
         print("Deleted contact:", person.get("resourceName"))
     else:
-        print_contact("Changed contact", person)
+        get_contacts_list(person)
 
 
-def print_contact(prefix, person):
+def get_contacts_list(person):
     """ Nicely outputs contact info. """
-    # FIXME: Add contacts to a list to then compare with tasks list. # pylint: disable=fixme
-    # This way I can check if the task has already been created.
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
     display_name = names[0].get("displayName") if names else "Unnamed"
     email = emails[0].get("value") if emails else "No email"
-    print(f"{prefix}: {display_name} <{email}>")
 
+    contacts_list.append([display_name, email])
 
 
 if __name__ == "__main__":
@@ -160,3 +161,5 @@ if __name__ == "__main__":
         full_sync(service)
 
     notion_controller.connect_to_notion_database()
+    print(contacts_list)
+    notion_controller.find_missing_tasks(contacts_list)
