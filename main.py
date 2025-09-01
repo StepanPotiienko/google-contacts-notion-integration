@@ -32,19 +32,16 @@ def get_credentials():
     return google_creds
 
 
-def load_sync_token():
-    """ Loads sync token from a file. """
-    # FIXME: Merge load_sync_token() and save_sync_token() into one function. # pylint: disable=fixme
-    if os.path.exists(SYNC_TOKEN_FILE):
-        with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
-            return f.read().strip()
-    return None
-
-
-def save_sync_token(token: str):
-    """ Saves sync token to a file. """
-    with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
-        f.write(token)
+def update_sync_token(token: str | None = None) -> str | None:
+    """ Either write to a file if token exists, or read from a file. """
+    if token is not None:
+        with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
+            f.write(token)
+    else:
+        if os.path.exists(SYNC_TOKEN_FILE):
+            with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
+                return f.read().strip()
+        return None
 
 
 def full_sync(sync_service):
@@ -81,7 +78,7 @@ def full_sync(sync_service):
 
     next_sync_token = results.get("nextSyncToken")
     if next_sync_token:
-        save_sync_token(next_sync_token)
+        update_sync_token(next_sync_token)
 
 
 def incremental_sync(sync_service, google_sync_token):
@@ -121,7 +118,7 @@ def incremental_sync(sync_service, google_sync_token):
 
         new_token = results.get("nextSyncToken")
         if new_token:
-            save_sync_token(new_token)
+            update_sync_token(new_token)
 
     except HttpError as e:
         if e.resp.status == 410:
@@ -156,7 +153,7 @@ if __name__ == "__main__":
     creds = get_credentials()
     service = build("people", "v1", credentials=creds)
 
-    sync_token = load_sync_token()
+    sync_token = update_sync_token()
     if sync_token:
         incremental_sync(service, sync_token)
     else:
