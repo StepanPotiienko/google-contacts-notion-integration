@@ -20,8 +20,8 @@ contacts_list = []
 def get_credentials():
     """ Grab credentials from Google API, and write them to a file. """
     google_creds = None
-    if os.path.exists("token.json"):
-        google_creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists("token_contacts.json"):
+        google_creds = Credentials.from_authorized_user_file("token_contacts.json", SCOPES)
     if not google_creds or not google_creds.valid:
         if google_creds and google_creds.expired and google_creds.refresh_token:
             google_creds.refresh(Request())
@@ -30,7 +30,7 @@ def get_credentials():
                 "credentials.json", SCOPES
             )
             google_creds = flow.run_local_server(port=0)
-        with open("token.json", "w", encoding="UTF-8") as token:
+        with open("token_contacts.json", "w", encoding="UTF-8") as token:
             token.write(google_creds.to_json())
     return google_creds
 
