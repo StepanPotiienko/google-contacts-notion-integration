@@ -1,7 +1,9 @@
-"""Module for fetching the last 5 Gmail messages every 15 minutes."""
+"""Module for fetching Gmail messages and notifying via Telegram about new orders."""
 
 import os.path
 import time
+import json
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -9,6 +11,25 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+DEBUG = False
+
+with open("telegram_bot.json", "r", encoding="UTF-8") as file:
+    data = json.load(file)
+
+    TELEGRAM_BOT_TOKEN = data["token"]
+    TELEGRAM_CHAT_ID = data["chat_id"]
+
+
+def send_telegram_message(text: str):
+    """Send a message to the user via Telegram bot."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            print(f"Failed to send Telegram message: {response.text}")
+    except requests.RequestException as e:
+        print(f"Telegram request failed: {e}")
 
 
 def get_gmail_service():
@@ -31,13 +52,13 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def fetch_last_messages(service, n=5):
-    """Fetch the last n Gmail messages and print basic info."""
+def fetch_last_messages(service, n=15, seen_ids=None):
+    """Fetch the last n Gmail messages and notify about new orders."""
 
-    orders_list: list = []
+    if seen_ids is None:
+        seen_ids = set()
 
     try:
-        # pylint: disable=E1101
         results = service.users().messages().list(
             userId="me", maxResults=n, labelIds=["INBOX"]
         ).execute()
@@ -45,46 +66,51 @@ def fetch_last_messages(service, n=5):
 
         if not messages:
             print("No messages found.")
-            return
+            return seen_ids
 
-        print(f"\nLast {n} messages:")
         for msg in messages:
+            if msg["id"] in seen_ids:
+                continue  # Skip already processed messages
+
             msg_data = service.users().messages().get(
-                userId="me", id=msg["id"], format="metadata",
-                metadataHeaders=["Subject", "From", "Date"]
+                userId="me",
+                id=msg["id"],
+                format="metadata",
+                metadataHeaders=["Subject", "From", "Date"],
             ).execute()
 
             headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
             subject = headers.get("Subject", "(No subject)")
             sender = headers.get("From", "(Unknown sender)")
-            # date = headers.get("Date", "(No date)")
 
-            if sender == 'info@agropride.com.ua' and 'Нове замовлення' in subject:
-                orders_list.append([headers])
+            if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
+                text = f"📩 New Order!\nFrom: {sender}\nSubject: {subject}"
+                print(text)
+                send_telegram_message(text)
 
-            # TODO: Check tomorrow if this works.
-            print(orders_list)
+            seen_ids.add(msg["id"])
 
+        return seen_ids
 
     except HttpError as error:
         print(f"An error occurred: {error}")
+        return seen_ids
 
 
 def main():
-    """Run the Gmail fetcher every 15 minutes."""
+    """Run the Gmail fetcher every 15 minutes and notify on new orders."""
     service = get_gmail_service()
-    is_running: bool= True
-    # FOR DEBUG: 0. PROD: 900
-    # FIXME: DO NOT FORGET TO CHANGE ON PROD
-    time_interval: int = 0
+    seen_ids: set = set()
+
+    # FOR DEBUG: 0. PROD: 900 (15 minutes)
+    time_interval: int = 0 if DEBUG else 900
 
     try:
-        while is_running:
-            fetch_last_messages(service, n=5)
-            print("Waiting 15 minutes before next check...\n")
+        while True:
+            seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
+            print("Waiting before next check...\n")
 
-            # FOR DEBUG PURPOSES
-            if time_interval == 0:
+            if DEBUG:
                 break
 
             time.sleep(time_interval)
