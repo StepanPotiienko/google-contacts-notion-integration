@@ -14,7 +14,6 @@ SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
 
 
-# FIXME: Add contacts with tag 'Lead' # pylint: disable=fixme
 contacts_list = []
 
 def get_credentials():
@@ -55,7 +54,7 @@ def full_sync(sync_service):
         .connections()
         .list(
             resourceName="people/me",
-            personFields="metadata,names,emailAddresses",
+            personFields="metadata,names,emailAddresses,phoneNumbers",
             requestSyncToken=True,
         )
         .execute()
@@ -144,10 +143,13 @@ def get_contacts_list(person):
     """ Nicely outputs contact info. """
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
+    phones = person.get("phoneNumbers", [])
+
     display_name = names[0].get("displayName") if names else "Unnamed"
     email = emails[0].get("value") if emails else "No email"
+    phone = phones[0].get("value") if phones else "No phone"
 
-    contacts_list.append([display_name, email])
+    contacts_list.append([display_name, email, phone])
 
 
 if __name__ == "__main__":
@@ -161,5 +163,4 @@ if __name__ == "__main__":
         full_sync(service)
 
     notion_controller.connect_to_notion_database()
-    print(contacts_list)
     notion_controller.find_missing_tasks(contacts_list)

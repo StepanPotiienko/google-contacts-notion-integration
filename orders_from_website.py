@@ -1,8 +1,9 @@
 """Module for fetching Gmail messages and notifying via Telegram about new orders."""
 
+import json
 import os.path
 import time
-import json
+
 import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -15,7 +16,6 @@ DEBUG = False
 
 with open("telegram_bot.json", "r", encoding="UTF-8") as file:
     data = json.load(file)
-
     TELEGRAM_BOT_TOKEN = data["token"]
     TELEGRAM_CHAT_ID = data["chat_id"]
 
@@ -27,13 +27,13 @@ def send_telegram_message(text: str):
     try:
         response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
-            print(f"Failed to send Telegram message: {response.text}")
+            print(f"❌ Failed to send Telegram message: {response.text}")
     except requests.RequestException as e:
-        print(f"Telegram request failed: {e}")
+        print(f"❌ Telegram request failed: {e}")
 
 
 def get_gmail_service():
-    """Authenticate and return Gmail API service."""
+    """Connect to Gmail API."""
     creds = None
     if os.path.exists("token_gmail.json"):
         creds = Credentials.from_authorized_user_file("token_gmail.json", SCOPES)
@@ -52,9 +52,8 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def fetch_last_messages(service, n=15, seen_ids=None):
+def fetch_last_messages(service, n=5, seen_ids=None):
     """Fetch the last n Gmail messages and notify about new orders."""
-
     if seen_ids is None:
         seen_ids = set()
 
@@ -65,7 +64,7 @@ def fetch_last_messages(service, n=15, seen_ids=None):
         messages = results.get("messages", [])
 
         if not messages:
-            print("No messages found.")
+            print("📭 No messages found.")
             return seen_ids
 
         for msg in messages:
@@ -92,8 +91,9 @@ def fetch_last_messages(service, n=15, seen_ids=None):
 
         return seen_ids
 
-    except HttpError as error:
-        print(f"An error occurred: {error}")
+    except (HttpError, BrokenPipeError) as error:
+        print(f"⚠️ Connection error: {error}. Retrying in 5s...")
+        time.sleep(5)
         return seen_ids
 
 
@@ -102,20 +102,20 @@ def main():
     service = get_gmail_service()
     seen_ids: set = set()
 
-    # FOR DEBUG: 0. PROD: 900 (15 minutes)
-    time_interval: int = 0 if DEBUG else 900
+    # FOR DEBUG: 5s. PROD: 900s (15 minutes)
+    time_interval: int = 5 if DEBUG else 900
 
     try:
         while True:
             seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
-            print("Waiting before next check...\n")
+            print("⏳ Waiting before next check...\n")
 
             if DEBUG:
                 break
 
             time.sleep(time_interval)
     except KeyboardInterrupt:
-        print("Stopping...")
+        print("🛑 Stopping...")
 
 
 if __name__ == "__main__":
