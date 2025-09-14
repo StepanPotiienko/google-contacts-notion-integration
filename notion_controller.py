@@ -6,7 +6,7 @@ from notion_client import Client
 
 dotenv.load_dotenv()
 
-NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_TOKEN = os.getenv("NOTION_API_KEY")
 CRM_DATABASE_ID = os.getenv("CRM_DATABASE_ID")
 PRODUCTION_DATABASE_ID = os.getenv("PRODUCTION_DATABASE_ID")
 
@@ -18,6 +18,7 @@ def connect_to_notion_database():
 
     print("Listing tasks from Notion database...")
 
+    print(CRM_DATABASE_ID)
     results = NOTION_CLIENT.databases.query(
         database_id=CRM_DATABASE_ID # type: ignore
         # In case I need to filter something.
