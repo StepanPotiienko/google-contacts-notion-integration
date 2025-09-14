@@ -1,18 +1,16 @@
 """ Notion related stuff """
 
-import json
+import os
+import dotenv
 from notion_client import Client
 
-with open("notion_api.json", "r", encoding="UTF-8") as file:
-    data = json.load(file)
-    notion_token = data["token"]
-    crm_database_id = data["crm_database_id"]
-    production_database_id = data["production_database_id"]
+dotenv.load_dotenv()
 
-if not notion_token:
-    raise ValueError("ERROR: Notion token is not valid.")
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+CRM_DATABASE_ID = os.getenv("CRM_DATABASE_ID")
+PRODUCTION_DATABASE_ID = os.getenv("PRODUCTION_DATABASE_ID")
 
-NOTION_CLIENT = Client(auth=notion_token)
+NOTION_CLIENT = Client(auth=NOTION_TOKEN)
 
 def connect_to_notion_database():
     """ Connect to a notion database and return tasks list (filtered by Status). """
@@ -21,7 +19,7 @@ def connect_to_notion_database():
     print("Listing tasks from Notion database...")
 
     results = NOTION_CLIENT.databases.query(
-        database_id=crm_database_id,
+        database_id=CRM_DATABASE_ID # type: ignore
         # In case I need to filter something.
         # filter={
         #     "property": "Status",
@@ -43,7 +41,7 @@ def connect_to_notion_database():
 def find_missing_tasks(contacts_list: list):
     """If a task with the name of the client is missing, create it in Notion."""
 
-    results = NOTION_CLIENT.databases.query(database_id=crm_database_id)
+    results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID) # type: ignore
     existing_tasks = set()
 
     for page in results["results"]:  # type: ignore
@@ -58,7 +56,7 @@ def find_missing_tasks(contacts_list: list):
             print(f"Creating new task for: {contact_name}")
 
             NOTION_CLIENT.pages.create(
-                parent={"database_id": crm_database_id},
+                parent={"database_id": CRM_DATABASE_ID},
                 properties={
                     "Name": {
                         "title": [
@@ -80,7 +78,7 @@ def find_missing_tasks(contacts_list: list):
             )
 
             NOTION_CLIENT.pages.create(
-                parent={"database_id": production_database_id},
+                parent={"database_id": PRODUCTION_DATABASE_ID},
                 properties={
                     "Name": {
                         "title": [

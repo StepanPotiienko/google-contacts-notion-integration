@@ -25,3 +25,13 @@ jobs:
 
       - name: Run script
         run: python main.py
+        env:
+          # Google API credentials
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+
+          # Notion API credentials
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
+          PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
