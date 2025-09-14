@@ -2,15 +2,16 @@
 
 import os
 import time
+import json
 import requests
 import dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-dotenv.load_dotenv()
+dotenv.load_dotenv()  # main env (Telegram bot)
+dotenv.load_dotenv("token_gmail.env")
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEBUG = False
@@ -36,21 +37,22 @@ def send_telegram_message(text: str):
 
 
 def get_gmail_service():
-    """Connect to Gmail API."""
+    """Connect to Gmail API using credentials from token_gmail.env."""
     creds = None
-    if os.path.exists("token_gmail.json"):
-        creds = Credentials.from_authorized_user_file("token_gmail.json", SCOPES)
+
+    creds_json = os.getenv("GOOGLE_TOKEN_JSON")
+    if creds_json:
+        try:
+            creds_info = json.loads(creds_json)
+            creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
+        except Exception as e:
+            print(f"❌ Failed to load Gmail credentials from env: {e}")
+
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
 
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json", SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-        with open("token_gmail.json", "w", encoding="utf-8") as token:
-            token.write(creds.to_json())
+        raise RuntimeError("❌ Gmail credentials missing or invalid. Check token_gmail.env")
 
     return build("gmail", "v1", credentials=creds)
 
