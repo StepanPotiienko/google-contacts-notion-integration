@@ -35,23 +35,29 @@ def send_telegram_message(text: str):
 
 
 def get_gmail_service():
-    """Connect to Gmail API using credentials from env variables."""
-    creds = None
+    """Connect to Gmail API using env credentials."""
+    required_vars = ["GMAIL_TOKEN", "GMAIL_REFRESH_TOKEN", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"]
+    missing = [v for v in required_vars if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"❌ Missing Gmail secrets: {missing}")
 
-    if os.getenv("GMAIL_TOKEN") and os.getenv("GMAIL_REFRESH_TOKEN"):
-        creds_info = {
-            "token": os.getenv("GMAIL_TOKEN"),
-            "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
-            "client_id": os.getenv("GMAIL_CLIENT_ID"),
-            "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
-            "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-        }
-        creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
+    creds_info = {
+        "token": os.getenv("GMAIL_TOKEN"),
+        "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
+        "client_id": os.getenv("GMAIL_CLIENT_ID"),
+        "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
+        "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+    }
+    creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
 
-    if creds and creds.expired and creds.refresh_token:
+    if creds.expired and creds.refresh_token:
         creds.refresh(Request())
 
+    if not creds.valid:
+        raise RuntimeError("❌ Gmail credentials invalid even after refresh")
+
     return build("gmail", "v1", credentials=creds)
+
 
 
 

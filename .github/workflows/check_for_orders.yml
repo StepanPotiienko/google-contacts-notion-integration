@@ -23,9 +23,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run script
-        run: python orders_from_website.py
-
       - name: Debug Gmail secrets
         run: |
           echo "GMAIL_TOKEN length: ${#GMAIL_TOKEN}"
@@ -39,3 +36,6 @@ jobs:
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
           GMAIL_TOKEN_URI: ${{ secrets.GMAIL_TOKEN_URI }}
+
+      - name: Run script
+        run: python orders_from_website.py
