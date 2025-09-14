@@ -38,14 +38,19 @@ def get_gmail_service():
     """Connect to Gmail API """
     creds = None
 
+    gmail_token = os.getenv("GMAIL_TOKEN")
+    gmail_refresh_token = os.getenv("GMAIL_REFRESH_TOKEN")
+    gmail_client_id = os.getenv("GMAIL_CLIENT_ID")
+    gmail_client_secret = os.getenv("GMAIL_CLIENT_SECRET")
+
     if os.getenv("GMAIL_TOKEN") and os.getenv("GMAIL_REFRESH_TOKEN"):
         creds_info = {
-            "token": os.getenv("GMAIL_TOKEN"),
-            "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
-            "client_id": os.getenv("GMAIL_CLIENT_ID"),
-            "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
+            "token": gmail_token,
+            "refresh_token": gmail_refresh_token,
+            "client_id": gmail_client_id,
+            "client_secret": gmail_client_secret,
             "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-            "scopes": SCOPES,
+            "scopes": SCOPES[0],
         }
 
         try:
