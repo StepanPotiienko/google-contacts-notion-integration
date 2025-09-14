@@ -54,8 +54,8 @@ def get_gmail_service():
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
 
-    if not creds or not creds.valid:
-        raise RuntimeError("❌ Gmail credentials missing or invalid")
+    # if not creds or not creds.valid:
+        # raise RuntimeError("❌ Gmail credentials missing or invalid")
 
     return build("gmail", "v1", credentials=creds)
 
