@@ -1,6 +1,6 @@
 *.json
 /venv
-*.txt
+sync_token.txt
 .env
 .idea/
 __pycache__/
