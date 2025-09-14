@@ -25,3 +25,17 @@ jobs:
 
       - name: Run script
         run: python orders_from_website.py
+
+      - name: Debug Gmail secrets
+        run: |
+          echo "GMAIL_TOKEN length: ${#GMAIL_TOKEN}"
+          echo "GMAIL_REFRESH_TOKEN length: ${#GMAIL_REFRESH_TOKEN}"
+          echo "GMAIL_CLIENT_ID length: ${#GMAIL_CLIENT_ID}"
+          echo "GMAIL_CLIENT_SECRET length: ${#GMAIL_CLIENT_SECRET}"
+          echo "GMAIL_TOKEN_URI: $GMAIL_TOKEN_URI"
+        env:
+          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_TOKEN_URI: ${{ secrets.GMAIL_TOKEN_URI }}
