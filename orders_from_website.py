@@ -39,13 +39,17 @@ def get_gmail_service():
     """Connect to Gmail API using credentials from token_gmail.env."""
     creds = None
 
-    creds_json = os.getenv("GMAIL_TOKEN")
-    if creds_json:
-        try:
-            creds_info = json.loads(creds_json)
-            creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
-        except Exception as e:
-            print(f"❌ Failed to load Gmail credentials from env: {e}")
+    if os.getenv("GMAIL_TOKEN"):
+        creds_info = {
+            "token": os.getenv("GMAIL_TOKEN"),
+            "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
+            "client_id": os.getenv("GMAIL_CLIENT_ID"),
+            "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
+            "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+            "scopes": [SCOPES[0]],
+            "expiry": os.getenv("GMAIL_EXPIRY"),
+        }
+        creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
 
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -54,6 +58,7 @@ def get_gmail_service():
         raise RuntimeError("❌ Gmail credentials missing or invalid")
 
     return build("gmail", "v1", credentials=creds)
+
 
 
 def fetch_last_messages(service, n=5, seen_ids=None):
