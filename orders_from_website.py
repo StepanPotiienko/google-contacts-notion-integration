@@ -10,8 +10,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-dotenv.load_dotenv()  # main env (Telegram bot)
-dotenv.load_dotenv("token_gmail.env")
+dotenv.load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEBUG = False
@@ -40,7 +39,7 @@ def get_gmail_service():
     """Connect to Gmail API using credentials from token_gmail.env."""
     creds = None
 
-    creds_json = os.getenv("GOOGLE_TOKEN_JSON")
+    creds_json = os.getenv("GMAIL_TOKEN")
     if creds_json:
         try:
             creds_info = json.loads(creds_json)
@@ -52,7 +51,7 @@ def get_gmail_service():
         creds.refresh(Request())
 
     if not creds or not creds.valid:
-        raise RuntimeError("❌ Gmail credentials missing or invalid. Check token_gmail.env")
+        raise RuntimeError("❌ Gmail credentials missing or invalid")
 
     return build("gmail", "v1", credentials=creds)
 
