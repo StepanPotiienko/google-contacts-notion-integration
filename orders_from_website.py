@@ -35,7 +35,7 @@ def send_telegram_message(text: str):
 
 
 def get_gmail_service():
-    """Connect to Gmail API using credentials from environment variables."""
+    """Connect to Gmail API """
     creds = None
 
     if os.getenv("GMAIL_TOKEN") and os.getenv("GMAIL_REFRESH_TOKEN"):

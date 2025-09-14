@@ -1,0 +1,7 @@
+- name: Debug env
+  run: |
+    echo "GMAIL_TOKEN: ${#GMAIL_TOKEN} chars"
+    echo "GMAIL_REFRESH_TOKEN: ${#GMAIL_REFRESH_TOKEN} chars"
+  env:
+    GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+    GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
