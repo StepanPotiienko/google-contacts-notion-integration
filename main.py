@@ -18,7 +18,12 @@ contacts_list = []
 
 
 def get_credentials():
-    """Load credentials from environment variables (no JSON files)."""
+    """ Get Google Contacts Credentials """
+    required_env = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]
+    for var in required_env:
+        if not os.environ.get(var):
+            raise ValueError(f"Missing required environment variable: {var}")
+
     google_creds = Credentials(
         None,
         refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
@@ -32,6 +37,7 @@ def get_credentials():
         google_creds.refresh(Request())
 
     return google_creds
+
 
 
 def update_sync_token(token: str | None = None) -> str | None:
