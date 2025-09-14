@@ -1,44 +1,45 @@
 """ Main logic of AgroprideOS """
 
-import os.path
+import os
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 import notion_controller
 
+load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
 
-
 contacts_list = []
 
+
 def get_credentials():
-    """ Grab credentials from Google API, and write them to a file. """
-    google_creds = None
-    if os.path.exists("token_contacts.json"):
-        google_creds = Credentials.from_authorized_user_file("token_contacts.json", SCOPES)
-    if not google_creds or not google_creds.valid:
-        if google_creds and google_creds.expired and google_creds.refresh_token:
-            google_creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json", SCOPES
-            )
-            google_creds = flow.run_local_server(port=0)
-        with open("token_contacts.json", "w", encoding="UTF-8") as token:
-            token.write(google_creds.to_json())
+    """Load credentials from environment variables (no JSON files)."""
+    google_creds = Credentials(
+        None,
+        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+        scopes=SCOPES,
+    )
+
+    if not google_creds.valid or google_creds.expired:
+        google_creds.refresh(Request())
+
     return google_creds
 
 
 def update_sync_token(token: str | None = None) -> str | None:
-    """ Either write to a file if token exists, or read from a file. """
+    """Either write to a file if token exists, or read from a file."""
     if token is not None:
         with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
             f.write(token)
+            return None
     else:
         if os.path.exists(SYNC_TOKEN_FILE):
             with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
@@ -69,7 +70,7 @@ def full_sync(sync_service):
             .connections()
             .list(
                 resourceName="people/me",
-                personFields="metadata,names,emailAddresses",
+                personFields="metadata,names,emailAddresses,phoneNumbers",
                 requestSyncToken=True,
                 pageToken=results["nextPageToken"],
             )
@@ -92,7 +93,7 @@ def incremental_sync(sync_service, google_sync_token):
             .connections()
             .list(
                 resourceName="people/me",
-                personFields="metadata,names,emailAddresses",
+                personFields="metadata,names,emailAddresses,phoneNumbers",
                 syncToken=google_sync_token,
             )
             .execute()
@@ -108,7 +109,7 @@ def incremental_sync(sync_service, google_sync_token):
                 .connections()
                 .list(
                     resourceName="people/me",
-                    personFields="metadata,names,emailAddresses",
+                    personFields="metadata,names,emailAddresses,phoneNumbers",
                     syncToken=google_sync_token,
                     pageToken=results["nextPageToken"],
                 )
@@ -131,7 +132,7 @@ def incremental_sync(sync_service, google_sync_token):
 
 
 def handle_person(person):
-    """ Checks if the contact is deleted or not. """
+    """Checks if the contact is deleted or not."""
     metadata = person.get("metadata", {})
     if metadata.get("deleted"):
         print("Deleted contact:", person.get("resourceName"))
@@ -140,7 +141,7 @@ def handle_person(person):
 
 
 def get_contacts_list(person):
-    """ Nicely outputs contact info. """
+    """Nicely outputs contact info."""
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
     phones = person.get("phoneNumbers", [])

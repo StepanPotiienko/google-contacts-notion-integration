@@ -1,3 +1,6 @@
 *.json
 /venv
 *.txt
+.env
+.github/
+__pycache__/
