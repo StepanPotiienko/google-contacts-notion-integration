@@ -2,5 +2,5 @@
 /venv
 *.txt
 .env
-.github/
+.idea/
 __pycache__/
