@@ -1,27 +1,30 @@
 """Module for fetching Gmail messages and notifying via Telegram about new orders."""
 
-import json
-import os.path
+import os
 import time
-
 import requests
+import dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+dotenv.load_dotenv()
+
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEBUG = False
 
-with open("telegram_bot.json", "r", encoding="UTF-8") as file:
-    data = json.load(file)
-    TELEGRAM_BOT_TOKEN = data["token"]
-    TELEGRAM_CHAT_ID = data["chat_id"]
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 
 def send_telegram_message(text: str):
     """Send a message to the user via Telegram bot."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
+        return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
     try:
