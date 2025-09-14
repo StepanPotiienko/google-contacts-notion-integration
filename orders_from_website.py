@@ -2,7 +2,6 @@
 
 import os
 import time
-import json
 import requests
 import dotenv
 from google.auth.transport.requests import Request
@@ -36,28 +35,32 @@ def send_telegram_message(text: str):
 
 
 def get_gmail_service():
-    """Connect to Gmail API using credentials from token_gmail.env."""
+    """Connect to Gmail API using credentials from environment variables."""
     creds = None
 
-    if os.getenv("GMAIL_TOKEN"):
+    if os.getenv("GMAIL_TOKEN") and os.getenv("GMAIL_REFRESH_TOKEN"):
         creds_info = {
             "token": os.getenv("GMAIL_TOKEN"),
             "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
             "client_id": os.getenv("GMAIL_CLIENT_ID"),
             "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
             "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
-            "scopes": [SCOPES[0]],
-            "expiry": os.getenv("GMAIL_EXPIRY"),
+            "scopes": SCOPES,
         }
-        creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
+
+        try:
+            creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
+        except Exception:
+            print("Failed to pull credentials for Gmail.")
 
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
 
-    # if not creds or not creds.valid:
-        # raise RuntimeError("❌ Gmail credentials missing or invalid")
+    if not creds or not creds.valid:
+        raise RuntimeError("❌ Gmail credentials missing or invalid")
 
     return build("gmail", "v1", credentials=creds)
+
 
 
 
