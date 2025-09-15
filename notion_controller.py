@@ -72,7 +72,7 @@ def find_missing_tasks(contacts_list: list):
                         "email": contact[1]
                     },
                     "Phone": {
-                        "phone": contact[2]
+                        "phone_number": contact[2]
                     }
                 }
             )
@@ -90,8 +90,8 @@ def find_missing_tasks(contacts_list: list):
                     "Status": {
                         "status": {"name": "Нова задача"}
                     },
-                    "Relation": {
+                    "Relation": [{
                         "id": contact_name
-                    }
+                    }]
                 }
             )
