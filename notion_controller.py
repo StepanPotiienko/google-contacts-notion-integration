@@ -37,12 +37,28 @@ def connect_to_notion_database():
 
     return tasks_list
 
+def get_title_property_name(database_id):
+    """ Parse the name of the property """
+    db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
+    for prop_name, prop in db["properties"].items(): # type: ignore
+        if prop["type"] == "title":
+            return prop_name
+    raise ValueError("No title property found in database")
+
+
+def debug_database_schema(database_id):
+    db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
+    print("Database schema:")
+    for name, prop in db["properties"].items(): # type: ignore
+        print(f"- {name}: {prop['type']}")
 
 def find_missing_tasks(contacts_list: list):
     """If a task with the name of the client is missing, create it in Notion."""
 
     results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID) # type: ignore
     existing_tasks = set()
+
+    debug_database_schema(database_id=CRM_DATABASE_ID)
 
     for page in results["results"]:  # type: ignore
         props = page["properties"]
@@ -55,14 +71,14 @@ def find_missing_tasks(contacts_list: list):
         if contact_name not in existing_tasks:
             print(f"Creating new task for: {contact_name}")
 
+            title_property = get_title_property_name(CRM_DATABASE_ID)
+
             NOTION_CLIENT.pages.create(
                 parent={"database_id": CRM_DATABASE_ID},
                 properties={
-                    "Name": {
+                    title_property: {
                         "title": [
-                            {
-                                "text": {"content": contact_name}
-                            }
+                            {"text": {"content": contact_name}}
                         ]
                     },
                     "Funel": {
@@ -72,7 +88,7 @@ def find_missing_tasks(contacts_list: list):
                         "email": contact[1]
                     },
                     "Phone": {
-                        "phone": contact[2]
+                        "phone_number": contact[2]
                     }
                 }
             )
