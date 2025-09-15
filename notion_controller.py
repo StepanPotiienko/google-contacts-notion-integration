@@ -72,7 +72,7 @@ def find_missing_tasks(contacts_list: list):
                         "email": contact[1]
                     },
                     "Phone": {
-                        "phone_number": contact[2]
+                        "phone": contact[2]
                     }
                 }
             )
