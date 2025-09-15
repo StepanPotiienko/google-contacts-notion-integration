@@ -1,6 +1,7 @@
 """Module for fetching Gmail messages and notifying via Telegram about new orders."""
 
 import os
+import ssl
 import time
 import requests
 import dotenv
@@ -100,10 +101,11 @@ def fetch_last_messages(service, n=5, seen_ids=None):
 
         return seen_ids
 
-    except (HttpError, BrokenPipeError) as error:
-        print(f"⚠️ Connection error: {error}. Retrying in 5s...")
-        time.sleep(5)
+    except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
+        print(f"⚠️ Connection error: {error}. Retrying in 15s...")
+        time.sleep(15)
         return seen_ids
+
 
 
 def main():
@@ -118,9 +120,6 @@ def main():
         while True:
             seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
             print("⏳ Waiting before next check...\n")
-
-            if DEBUG:
-                break
 
             time.sleep(time_interval)
     except KeyboardInterrupt:

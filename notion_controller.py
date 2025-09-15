@@ -18,7 +18,6 @@ def connect_to_notion_database():
 
     print("Listing tasks from Notion database...")
 
-    print(CRM_DATABASE_ID)
     results = NOTION_CLIENT.databases.query(
         database_id=CRM_DATABASE_ID # type: ignore
         # In case I need to filter something.
