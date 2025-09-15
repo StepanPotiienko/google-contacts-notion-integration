@@ -32,6 +32,6 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
 
           # Notion API credentials
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
           PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}

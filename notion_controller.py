@@ -6,11 +6,11 @@ from notion_client import Client
 
 dotenv.load_dotenv()
 
-NOTION_TOKEN = os.getenv("NOTION_API_KEY")
+NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 CRM_DATABASE_ID = os.getenv("CRM_DATABASE_ID")
 PRODUCTION_DATABASE_ID = os.getenv("PRODUCTION_DATABASE_ID")
 
-NOTION_CLIENT = Client(auth=NOTION_TOKEN)
+NOTION_CLIENT = Client(auth=NOTION_API_KEY)
 
 def connect_to_notion_database():
     """ Connect to a notion database and return tasks list (filtered by Status). """
