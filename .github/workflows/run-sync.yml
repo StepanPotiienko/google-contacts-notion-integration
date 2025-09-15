@@ -1,4 +1,4 @@
-name: Run Google Contacts → Notion Sync
+name: "Run Google Contacts Notion Sync"
 
 on:
   schedule:
