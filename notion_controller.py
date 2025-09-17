@@ -75,7 +75,7 @@ def find_missing_tasks(contacts_list: list):
 
 
             print("Creating a page in CRM...")
-            NOTION_CLIENT.pages.create(
+            crm_page = NOTION_CLIENT.pages.create(
 									parent={"database_id": CRM_DATABASE_ID},
 									properties={
 											"Name": {
@@ -95,8 +95,10 @@ def find_missing_tasks(contacts_list: list):
 									}
 							)
 
-            # crm_page_id = crm_page["id"] # type: ignore
+            # How to I fetch the id of the page?
+            CRM_PAGE_ID = crm_page["id"] # type: ignore
 
+            # TODO: Implement adding a task to Production database.
             # print("Creating a page in Production Tasks database...")
             # NOTION_CLIENT.pages.create(
             #     parent={"database_id": PRODUCTION_DATABASE_ID},
@@ -116,3 +118,6 @@ def find_missing_tasks(contacts_list: list):
             #         }]
             #     }
             # )
+
+# I have the way default VS Code debugger works...
+input("Press Enter to exit...")
