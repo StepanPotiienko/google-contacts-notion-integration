@@ -55,6 +55,7 @@ def debug_database_schema(database_id):
 
 def find_missing_tasks(contacts_list: list):
     """If a task with the name of the client is missing, create it in Notion."""
+    print("Creating pages for the tasks...")
 
     results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID) # type: ignore
     existing_tasks = set()
@@ -73,7 +74,8 @@ def find_missing_tasks(contacts_list: list):
             print(f"Creating new task for: {contact_name}")
 
 
-            crm_page = NOTION_CLIENT.pages.create(
+            print("Creating a page in CRM...")
+            NOTION_CLIENT.pages.create(
 									parent={"database_id": CRM_DATABASE_ID},
 									properties={
 											"Name": {
@@ -93,24 +95,24 @@ def find_missing_tasks(contacts_list: list):
 									}
 							)
 
-            crm_page_id = crm_page["id"] # type: ignore
+            # crm_page_id = crm_page["id"] # type: ignore
 
-
-            NOTION_CLIENT.pages.create(
-                parent={"database_id": PRODUCTION_DATABASE_ID},
-                properties={
-                    "Name": {
-                        "title": [
-                            {
-                                "text": {"content": contact_name}
-                            }
-                        ]
-                    },
-                    "Status": {
-                        "status": {"name": "Нова задача"}
-                    },
-                    "Relation": [{
-                        "id": crm_page_id 
-                    }]
-                }
-            )
+            # print("Creating a page in Production Tasks database...")
+            # NOTION_CLIENT.pages.create(
+            #     parent={"database_id": PRODUCTION_DATABASE_ID},
+            #     properties={
+            #         "Name": {
+            #             "title": [
+            #                 {
+            #                     "text": {"content": contact_name}
+            #                 }
+            #             ]
+            #         },
+            #         "Status": {
+            #             "status": {"name": "Нова задача"}
+            #         },
+            #         "Relation": [{
+            #             "id": crm_page_id
+            #         }]
+            #     }
+            # )
