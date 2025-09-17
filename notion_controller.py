@@ -38,7 +38,7 @@ def connect_to_notion_database():
     return tasks_list
 
 def get_title_property_name(database_id):
-    """ Parse the name of the property """
+    """ Parse the name of the property. """
     db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
     for prop_name, prop in db["properties"].items(): # type: ignore
         if prop["type"] == "title":
@@ -47,6 +47,7 @@ def get_title_property_name(database_id):
 
 
 def debug_database_schema(database_id):
+    """ Display properties of a database with the database_id. """
     db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
     print("Database schema:")
     for name, prop in db["properties"].items(): # type: ignore
@@ -71,27 +72,29 @@ def find_missing_tasks(contacts_list: list):
         if contact_name not in existing_tasks:
             print(f"Creating new task for: {contact_name}")
 
-            title_property = get_title_property_name(CRM_DATABASE_ID)
 
-            NOTION_CLIENT.pages.create(
-                parent={"database_id": CRM_DATABASE_ID},
-                properties={
-                    title_property: {
-                        "title": [
-                            {"text": {"content": contact_name}}
-                        ]
-                    },
-                    "Funel": {
-                        "status": {"name": "Leads. Чого так мало?"}
-                    },
-                    "Email": {
-                        "email": contact[1]
-                    },
-                    "Phone": {
-                        "phone_number": contact[2]
-                    }
-                }
-            )
+            crm_page = NOTION_CLIENT.pages.create(
+									parent={"database_id": CRM_DATABASE_ID},
+									properties={
+											"Name": {
+													"title": [
+															{"text": {"content": contact_name}}
+													]
+											},
+											"Funel": {
+													"status": {"name": "Leads. Чого так мало?"}  # must exist in DB
+											},
+											"Email": {
+													"email": contact[1] if contact[1] != "No email" else None
+											},
+											"Phone": {
+													"phone_number": contact[2] if contact[2] != "No phone" else None
+											}
+									}
+							)
+
+            crm_page_id = crm_page["id"] # type: ignore
+
 
             NOTION_CLIENT.pages.create(
                 parent={"database_id": PRODUCTION_DATABASE_ID},
@@ -107,7 +110,7 @@ def find_missing_tasks(contacts_list: list):
                         "status": {"name": "Нова задача"}
                     },
                     "Relation": [{
-                        "id": contact_name
+                        "id": crm_page_id 
                     }]
                 }
             )
