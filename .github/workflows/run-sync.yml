@@ -13,13 +13,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Restore sync_token.txt
+      - name: Retreat sync_token.txt
         uses: actions/cache@v4
         with:
           path: sync_token.txt
-          key: sync-token-cache-${{ github.run_id }}
+          key: sync-token-cache
           restore-keys: |
-            sync-token-cache-
+            sync-token-cache
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,9 +41,3 @@ jobs:
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
           PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
-
-      - name: Save sync_token.txt
-        uses: actions/cache@v4
-        with:
-          path: sync_token.txt
-          key: sync-token-cache-${{ github.run_id }}
