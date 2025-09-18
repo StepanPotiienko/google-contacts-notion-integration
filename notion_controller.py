@@ -1,4 +1,4 @@
-""" Notion related stuff """
+"""Notion related stuff"""
 
 import os
 import dotenv
@@ -12,14 +12,15 @@ PRODUCTION_DATABASE_ID = os.getenv("PRODUCTION_DATABASE_ID")
 
 NOTION_CLIENT = Client(auth=NOTION_API_KEY)
 
+
 def connect_to_notion_database():
-    """ Connect to a notion database and return tasks list (filtered by Status). """
+    """Connect to a notion database and return tasks list (filtered by Status)."""
     tasks_list: list = []
 
     print("Listing tasks from Notion database...")
 
     results = NOTION_CLIENT.databases.query(
-        database_id=CRM_DATABASE_ID # type: ignore
+        database_id=CRM_DATABASE_ID  # type: ignore
         # In case I need to filter something.
         # filter={
         #     "property": "Status",
@@ -37,27 +38,29 @@ def connect_to_notion_database():
 
     return tasks_list
 
+
 def get_title_property_name(database_id):
-    """ Parse the name of the property. """
+    """Parse the name of the property."""
     db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
-    for prop_name, prop in db["properties"].items(): # type: ignore
+    for prop_name, prop in db["properties"].items():  # type: ignore
         if prop["type"] == "title":
             return prop_name
     raise ValueError("No title property found in database")
 
 
 def debug_database_schema(database_id):
-    """ Display properties of a database with the database_id. """
+    """Display properties of a database with the database_id."""
     db = NOTION_CLIENT.databases.retrieve(database_id=database_id)
     print("Database schema:")
-    for name, prop in db["properties"].items(): # type: ignore
+    for name, prop in db["properties"].items():  # type: ignore
         print(f"- {name}: {prop['type']}")
+
 
 def find_missing_tasks(contacts_list: list):
     """If a task with the name of the client is missing, create it in Notion."""
     print("Creating pages for the tasks...")
 
-    results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID) # type: ignore
+    results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID)  # type: ignore
     existing_tasks = set()
 
     debug_database_schema(database_id=CRM_DATABASE_ID)
@@ -73,30 +76,25 @@ def find_missing_tasks(contacts_list: list):
         if contact_name not in existing_tasks:
             print(f"Creating new task for: {contact_name}")
 
-
             print("Creating a page in CRM...")
             crm_page = NOTION_CLIENT.pages.create(
-									parent={"database_id": CRM_DATABASE_ID},
-									properties={
-											"Name": {
-													"title": [
-															{"text": {"content": contact_name}}
-													]
-											},
-											"Funel": {
-													"status": {"name": "Leads. Чого так мало?"}  # must exist in DB
-											},
-											"Email": {
-													"email": contact[1] if contact[1] != "No email" else None
-											},
-											"Phone": {
-													"phone_number": contact[2] if contact[2] != "No phone" else None
-											}
-									}
-							)
+                parent={"database_id": CRM_DATABASE_ID},
+                properties={
+                    "Name": {"title": [{"text": {"content": contact_name}}]},
+                    "Funel": {
+                        "status": {"name": "Leads. Чого так мало?"}  # must exist in DB
+                    },
+                    "Email": {
+                        "email": contact[1] if contact[1] != "No email" else None
+                    },
+                    "Phone": {
+                        "phone_number": contact[2] if contact[2] != "No phone" else None
+                    },
+                },
+            )
 
             # How to I fetch the id of the page?
-            CRM_PAGE_ID = crm_page["id"] # type: ignore
+            CRM_PAGE_ID = crm_page["id"]  # type: ignore
 
             # TODO: Implement adding a task to Production database.
             # print("Creating a page in Production Tasks database...")
@@ -118,6 +116,3 @@ def find_missing_tasks(contacts_list: list):
             #         }]
             #     }
             # )
-
-# I have the way default VS Code debugger works...
-input("Press Enter to exit...")

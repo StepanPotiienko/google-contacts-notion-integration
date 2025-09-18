@@ -1,4 +1,4 @@
-""" Main logic of AgroprideOS """
+"""Main logic of AgroprideOS"""
 
 import os
 from dotenv import load_dotenv
@@ -18,7 +18,7 @@ contacts_list = []
 
 
 def get_credentials():
-    """ Get Google Contacts Credentials """
+    """Get Google Contacts Credentials."""
     required_env = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]
     for var in required_env:
         if not os.environ.get(var):
@@ -39,18 +39,16 @@ def get_credentials():
     return google_creds
 
 
-
 def update_sync_token(token: str | None = None) -> str | None:
-    """Either write to a file if token exists, or read from a file."""
+    """Write new token to file, or read existing one."""
     if token is not None:
         with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
             f.write(token)
-            return None
-    else:
-        if os.path.exists(SYNC_TOKEN_FILE):
-            with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
-                return f.read().strip()
         return None
+    elif os.path.exists(SYNC_TOKEN_FILE):
+        with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
+            return f.read().strip()
+    return None
 
 
 def full_sync(sync_service):
@@ -147,7 +145,7 @@ def handle_person(person):
 
 
 def get_contacts_list(person):
-    """Nicely outputs contact info."""
+    """Append contact info to contacts_list."""
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
     phones = person.get("phoneNumbers", [])
