@@ -2,7 +2,7 @@ name: "Run Google Contacts Notion Sync"
 
 on:
   schedule:
-    - cron: "* */2 * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 jobs:
