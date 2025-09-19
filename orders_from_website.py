@@ -66,7 +66,7 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def fetch_last_messages(service, n=5, seen_ids=None):
+def fetch_last_messages(service, n=15, seen_ids=None):
     """Fetch the last n Gmail messages and notify about new orders."""
     if seen_ids is None:
         seen_ids = set()
@@ -125,8 +125,8 @@ def main():
     seen_ids: set = set()
 
     try:
+        print("Checking the mail...\n")
         seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
-        print("Waiting before next check...\n")
 
     except KeyboardInterrupt:
         print("Stopping...")
