@@ -9,15 +9,12 @@ from googleapiclient.errors import HttpError
 
 import notion_controller
 
-# ===================== CONFIG =====================
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
 contacts_list: list[list[str]] = []
-# ==================================================
 
 
-# -------------------- AUTH ------------------------
 def get_credentials():
     """Retrieve or refresh Google API credentials."""
     required_env = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]
@@ -40,10 +37,6 @@ def get_credentials():
     return creds
 
 
-# --------------------------------------------------
-
-
-# -------------------- TOKEN -----------------------
 def update_sync_token(token: str | None = None) -> str | None:
     """Save sync token to file or retrieve existing one."""
     if token is not None:
@@ -58,10 +51,6 @@ def update_sync_token(token: str | None = None) -> str | None:
     return None
 
 
-# --------------------------------------------------
-
-
-# -------------------- SYNC ------------------------
 def full_sync(service):
     """Perform a full sync and update local token."""
     print("🔄 Performing full sync...")
@@ -82,12 +71,12 @@ def full_sync(service):
     next_token = results.get("nextSyncToken")
     if next_token:
         update_sync_token(next_token)
-        print("✅ Full sync complete. Token updated.")
+        print("Full sync complete. Token updated.")
 
 
 def incremental_sync(service, token: str):
     """Perform incremental sync with stored token."""
-    print("🔍 Checking for changes...")
+    print("Checking for changes...")
     try:
         results = _fetch_connections(service, sync_token=token)
 
@@ -108,11 +97,11 @@ def incremental_sync(service, token: str):
         new_token = results.get("nextSyncToken")
         if new_token:
             update_sync_token(new_token)
-            print("✅ Incremental sync complete. Token updated.")
+            print("Incremental sync complete. Token updated.")
 
     except HttpError as e:
         if e.resp.status in (400, 410):  # invalid/expired sync token
-            print("⚠️ Sync token expired or invalid. Running full sync...")
+            print("Sync token expired or invalid. Running full sync...")
             full_sync(service)
         else:
             raise
@@ -124,7 +113,7 @@ def _fetch_connections(
     page_token: str | None = None,
     request_sync_token: bool = False,
 ):
-    """Helper: request Google People connections with correct params."""
+    """Request Google People connections with correct params."""
     return (
         service.people()
         .connections()
@@ -139,10 +128,6 @@ def _fetch_connections(
     )
 
 
-# --------------------------------------------------
-
-
-# -------------------- HANDLERS --------------------
 def handle_person(person: dict):
     """Process a person record: add or mark deleted."""
     metadata = person.get("metadata", {})
@@ -165,10 +150,6 @@ def get_contacts_list(person: dict):
     contacts_list.append([display_name, email, phone])
 
 
-# --------------------------------------------------
-
-
-# -------------------- MAIN ------------------------
 def main():
     """Run the script"""
     creds = get_credentials()
@@ -180,11 +161,9 @@ def main():
     else:
         full_sync(service)
 
-    # Push results to Notion
     notion_controller.connect_to_notion_database()
     notion_controller.find_missing_tasks(contacts_list)
 
 
 if __name__ == "__main__":
     main()
-# --------------------------------------------------
