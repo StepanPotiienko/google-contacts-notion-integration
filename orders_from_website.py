@@ -13,7 +13,6 @@ from googleapiclient.errors import HttpError
 dotenv.load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-DEBUG = False
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -22,7 +21,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 def send_telegram_message(text: str):
     """Send a message to the user via Telegram bot."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
+        print("Missing Telegram credentials. Check your .env or GitHub Secrets.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -82,7 +81,7 @@ def fetch_last_messages(service, n=5, seen_ids=None):
         messages = results.get("messages", [])
 
         if not messages:
-            print("📭 No messages found.")
+            print("No messages found.")
             return seen_ids
 
         for msg in messages:
@@ -115,27 +114,22 @@ def fetch_last_messages(service, n=5, seen_ids=None):
         return seen_ids
 
     except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
-        print(f"⚠️ Connection error: {error}. Retrying in 15s...")
+        print(f"Connection error: {error}.")
         time.sleep(15)
         return seen_ids
 
 
 def main():
-    """Run the Gmail fetcher every 15 minutes and notify on new orders."""
+    """Run the Gmail fetcher and notify on new orders."""
     service = get_gmail_service()
     seen_ids: set = set()
 
-    # FOR DEBUG: 5s. PROD: 900s (15 minutes)
-    time_interval: int = 5 if DEBUG else 900
-
     try:
-        while True:
-            seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
-            print("⏳ Waiting before next check...\n")
+        seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
+        print("Waiting before next check...\n")
 
-            time.sleep(time_interval)
     except KeyboardInterrupt:
-        print("🛑 Stopping...")
+        print("Stopping...")
 
 
 if __name__ == "__main__":

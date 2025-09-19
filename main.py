@@ -53,7 +53,7 @@ def update_sync_token(token: str | None = None) -> str | None:
 
 def full_sync(service):
     """Perform a full sync and update local token."""
-    print("🔄 Performing full sync...")
+    print("Performing full sync...")
     results = _fetch_connections(service, request_sync_token=True)
 
     for person in results.get("connections", []):
@@ -132,7 +132,7 @@ def handle_person(person: dict):
     """Process a person record: add or mark deleted."""
     metadata = person.get("metadata", {})
     if metadata.get("deleted"):
-        print(f"🗑️ Deleted contact: {person.get('resourceName')}")
+        print(f"Deleted contact: {person.get('resourceName')}")
     else:
         get_contacts_list(person)
 

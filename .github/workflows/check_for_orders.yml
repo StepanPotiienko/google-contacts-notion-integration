@@ -2,7 +2,7 @@ name: Check if for new orders on the website
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 */1 * * *"
   workflow_dispatch: # allows manual run from GitHub UI
 
 jobs:
