@@ -124,12 +124,10 @@ def main():
     service = get_gmail_service()
     seen_ids: set = set()
 
-    try:
-        print("Checking the mail...\n")
-        seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
+    print("Checking the mail...\n")
+    seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
 
-    except KeyboardInterrupt:
-        print("Stopping...")
+    print("Done.")
 
 
 if __name__ == "__main__":
