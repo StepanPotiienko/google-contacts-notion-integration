@@ -9,22 +9,23 @@ from googleapiclient.errors import HttpError
 
 import notion_controller
 
+# ===================== CONFIG =====================
 load_dotenv()
-
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
+contacts_list: list[list[str]] = []
+# ==================================================
 
-contacts_list = []
 
-
+# -------------------- AUTH ------------------------
 def get_credentials():
-    """Get Google Contacts Credentials."""
+    """Retrieve or refresh Google API credentials."""
     required_env = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]
     for var in required_env:
         if not os.environ.get(var):
             raise ValueError(f"Missing required environment variable: {var}")
 
-    google_creds = Credentials(
+    creds = Credentials(
         None,
         refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
         token_uri="https://oauth2.googleapis.com/token",
@@ -33,91 +34,72 @@ def get_credentials():
         scopes=SCOPES,
     )
 
-    if not google_creds.valid or google_creds.expired:
-        google_creds.refresh(Request())
+    if not creds.valid or creds.expired:
+        creds.refresh(Request())
 
-    return google_creds
+    return creds
 
 
+# --------------------------------------------------
+
+
+# -------------------- TOKEN -----------------------
 def update_sync_token(token: str | None = None) -> str | None:
-    """Write new token to file, or read existing one."""
+    """Save sync token to file or retrieve existing one."""
     if token is not None:
         with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
             f.write(token)
         return None
-    elif os.path.exists(SYNC_TOKEN_FILE):
+
+    if os.path.exists(SYNC_TOKEN_FILE):
         with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
             return f.read().strip()
+
     return None
 
 
-def full_sync(sync_service):
-    """Perform a full sync and store the sync token."""
-    print("Performing full sync...")
-    results = (
-        sync_service.people()
-        .connections()
-        .list(
-            resourceName="people/me",
-            personFields="metadata,names,emailAddresses,phoneNumbers",
-            requestSyncToken=True,
-        )
-        .execute()
-    )
+# --------------------------------------------------
+
+
+# -------------------- SYNC ------------------------
+def full_sync(service):
+    """Perform a full sync and update local token."""
+    print("🔄 Performing full sync...")
+    results = _fetch_connections(service, request_sync_token=True)
 
     for person in results.get("connections", []):
-        get_contacts_list(person)
+        handle_person(person)
 
     while "nextPageToken" in results:
-        results = (
-            sync_service.people()
-            .connections()
-            .list(
-                resourceName="people/me",
-                personFields="metadata,names,emailAddresses,phoneNumbers",
-                requestSyncToken=True,
-                pageToken=results["nextPageToken"],
-            )
-            .execute()
+        results = _fetch_connections(
+            service,
+            request_sync_token=True,
+            page_token=results["nextPageToken"],
         )
         for person in results.get("connections", []):
-            get_contacts_list(person)
+            handle_person(person)
 
-    next_sync_token = results.get("nextSyncToken")
-    if next_sync_token:
-        update_sync_token(next_sync_token)
+    next_token = results.get("nextSyncToken")
+    if next_token:
+        update_sync_token(next_token)
+        print("✅ Full sync complete. Token updated.")
 
 
-def incremental_sync(sync_service, google_sync_token):
-    """Fetch changes since last sync."""
-    print("Checking for changes...")
+def incremental_sync(service, token: str):
+    """Perform incremental sync with stored token."""
+    print("🔍 Checking for changes...")
     try:
-        results = (
-            sync_service.people()
-            .connections()
-            .list(
-                resourceName="people/me",
-                personFields="metadata,names,emailAddresses,phoneNumbers",
-                syncToken=google_sync_token,
-            )
-            .execute()
-        )
+        results = _fetch_connections(service, sync_token=token)
 
         if "connections" in results:
             for person in results["connections"]:
                 handle_person(person)
 
         while "nextPageToken" in results:
-            results = (
-                sync_service.people()
-                .connections()
-                .list(
-                    resourceName="people/me",
-                    personFields="metadata,names,emailAddresses,phoneNumbers",
-                    syncToken=google_sync_token,
-                    pageToken=results["nextPageToken"],
-                )
-                .execute()
+            results = _fetch_connections(
+                service,
+                sync_token=token,
+                page_token=results["nextPageToken"],
             )
             if "connections" in results:
                 for person in results["connections"]:
@@ -126,26 +108,52 @@ def incremental_sync(sync_service, google_sync_token):
         new_token = results.get("nextSyncToken")
         if new_token:
             update_sync_token(new_token)
+            print("✅ Incremental sync complete. Token updated.")
 
     except HttpError as e:
-        if e.resp.status == 410:
-            print("Sync token expired. Running full sync...")
-            full_sync(sync_service)
+        if e.resp.status in (400, 410):  # invalid/expired sync token
+            print("⚠️ Sync token expired or invalid. Running full sync...")
+            full_sync(service)
         else:
             raise
 
 
-def handle_person(person):
-    """Checks if the contact is deleted or not."""
+def _fetch_connections(
+    service,
+    sync_token: str | None = None,
+    page_token: str | None = None,
+    request_sync_token: bool = False,
+):
+    """Helper: request Google People connections with correct params."""
+    return (
+        service.people()
+        .connections()
+        .list(
+            resourceName="people/me",
+            personFields="metadata,names,emailAddresses,phoneNumbers",
+            syncToken=sync_token,
+            pageToken=page_token,
+            requestSyncToken=request_sync_token,
+        )
+        .execute()
+    )
+
+
+# --------------------------------------------------
+
+
+# -------------------- HANDLERS --------------------
+def handle_person(person: dict):
+    """Process a person record: add or mark deleted."""
     metadata = person.get("metadata", {})
     if metadata.get("deleted"):
-        print("Deleted contact:", person.get("resourceName"))
+        print(f"🗑️ Deleted contact: {person.get('resourceName')}")
     else:
         get_contacts_list(person)
 
 
-def get_contacts_list(person):
-    """Append contact info to contacts_list."""
+def get_contacts_list(person: dict):
+    """Extract name, email, and phone into contacts_list."""
     names = person.get("names", [])
     emails = person.get("emailAddresses", [])
     phones = person.get("phoneNumbers", [])
@@ -157,15 +165,26 @@ def get_contacts_list(person):
     contacts_list.append([display_name, email, phone])
 
 
-if __name__ == "__main__":
+# --------------------------------------------------
+
+
+# -------------------- MAIN ------------------------
+def main():
+    """Run the script"""
     creds = get_credentials()
     service = build("people", "v1", credentials=creds)
 
-    sync_token = update_sync_token()
-    if sync_token:
-        incremental_sync(service, sync_token)
+    token = update_sync_token()
+    if token:
+        incremental_sync(service, token)
     else:
         full_sync(service)
 
+    # Push results to Notion
     notion_controller.connect_to_notion_database()
     notion_controller.find_missing_tasks(contacts_list)
+
+
+if __name__ == "__main__":
+    main()
+# --------------------------------------------------
