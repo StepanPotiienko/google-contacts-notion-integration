@@ -1,10 +1,13 @@
-"""Module for fetching Gmail messages and notifying via Telegram about new orders."""
+"""Fetch Gmail messages and send Telegram alerts for new orders"""
 
+import logging
 import os
 import ssl
 import time
-import requests
+from typing import Any, Dict, Set
+
 import dotenv
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -13,80 +16,100 @@ from googleapiclient.errors import HttpError
 dotenv.load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-DEBUG = False
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+CHECK_INTERVAL = 5 if DEBUG else 900
+MESSAGES_LIMIT = 5
 
-def send_telegram_message(text: str):
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.DEBUG if DEBUG else logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+
+def send_telegram_message(text: str) -> None:
     """Send a message to the user via Telegram bot."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
+        logger.error("Missing Telegram credentials. Check your .env or GitHub Secrets.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+
     try:
         response = requests.post(url, json=payload, timeout=10)
-        if response.status_code != 200:
-            print(f"❌ Failed to send Telegram message: {response.text}")
+        response.raise_for_status()
+        logger.info("✅ Telegram message sent.")
     except requests.RequestException as e:
-        print(f"❌ Telegram request failed: {e}")
+        logger.error("Telegram request failed: %s", e)
 
 
 def get_gmail_service():
     """Connect to Gmail API using env credentials."""
-    required_vars = ["GMAIL_TOKEN", "GMAIL_REFRESH_TOKEN", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"]
+    required_vars = [
+        "GMAIL_TOKEN",
+        "GMAIL_REFRESH_TOKEN",
+        "GMAIL_CLIENT_ID",
+        "GMAIL_CLIENT_SECRET",
+    ]
     missing = [v for v in required_vars if not os.getenv(v)]
     if missing:
-        raise RuntimeError(f"❌ Missing Gmail secrets: {missing}")
+        raise RuntimeError(f"Missing Gmail secrets: {missing}")
 
     creds_info = {
         "token": os.getenv("GMAIL_TOKEN"),
         "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
         "client_id": os.getenv("GMAIL_CLIENT_ID"),
         "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
-        "token_uri": os.getenv("GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"),
+        "token_uri": os.getenv(
+            "GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"
+        ),
     }
     creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
 
     if creds.expired and creds.refresh_token:
+        logger.info("🔄 Refreshing Gmail credentials...")
         creds.refresh(Request())
 
     if not creds.valid:
-        raise RuntimeError("❌ Gmail credentials invalid even after refresh")
+        raise RuntimeError("Gmail credentials invalid even after refresh")
 
     return build("gmail", "v1", credentials=creds)
 
 
-
-
-def fetch_last_messages(service, n=5, seen_ids=None):
+def fetch_last_messages(service, n: int, seen_ids: Set[str]) -> Set[str]:
     """Fetch the last n Gmail messages and notify about new orders."""
-    if seen_ids is None:
-        seen_ids = set()
-
     try:
-        results = service.users().messages().list(
-            userId="me", maxResults=n, labelIds=["INBOX"]
-        ).execute()
+        results = (
+            service.users()
+            .messages()
+            .list(userId="me", maxResults=n, labelIds=["INBOX"])
+            .execute()
+        )
         messages = results.get("messages", [])
-
         if not messages:
-            print("📭 No messages found.")
+            logger.info("📭 No messages found.")
             return seen_ids
 
         for msg in messages:
             if msg["id"] in seen_ids:
-                continue  # Skip already processed messages
+                continue
 
-            msg_data = service.users().messages().get(
-                userId="me",
-                id=msg["id"],
-                format="metadata",
-                metadataHeaders=["Subject", "From", "Date"],
-            ).execute()
+            msg_data: Dict[str, Any] = (
+                service.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["Subject", "From", "Date"],
+                )
+                .execute()
+            )
 
             headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
             subject = headers.get("Subject", "(No subject)")
@@ -94,7 +117,7 @@ def fetch_last_messages(service, n=5, seen_ids=None):
 
             if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
                 text = f"📩 New Order!\nFrom: {sender}\nSubject: {subject}"
-                print(text)
+                logger.info(text)
                 send_telegram_message(text)
 
             seen_ids.add(msg["id"])
@@ -102,28 +125,23 @@ def fetch_last_messages(service, n=5, seen_ids=None):
         return seen_ids
 
     except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
-        print(f"⚠️ Connection error: {error}. Retrying in 15s...")
+        logger.warning("⚠️ Connection error: %s. Retrying in 15s...", error)
         time.sleep(15)
         return seen_ids
 
 
-
-def main():
-    """Run the Gmail fetcher every 15 minutes and notify on new orders."""
+def main() -> None:
+    """Run the Gmail fetcher every CHECK_INTERVAL seconds and notify on new orders."""
     service = get_gmail_service()
-    seen_ids: set = set()
-
-    # FOR DEBUG: 5s. PROD: 900s (15 minutes)
-    time_interval: int = 5 if DEBUG else 900
+    seen_ids: Set[str] = set()
 
     try:
         while True:
-            seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
-            print("⏳ Waiting before next check...\n")
-
-            time.sleep(time_interval)
+            seen_ids = fetch_last_messages(service, n=MESSAGES_LIMIT, seen_ids=seen_ids)
+            logger.info("⏳ Waiting before next check...\n")
+            time.sleep(CHECK_INTERVAL)
     except KeyboardInterrupt:
-        print("🛑 Stopping...")
+        logger.info("🛑 Stopping...")
 
 
 if __name__ == "__main__":
