@@ -56,6 +56,25 @@ def debug_database_schema(database_id):
         print(f"- {name}: {prop['type']}")
 
 
+def page_exists_in_database(database_id: str, page_name: str) -> bool:
+    """
+    Check whether a page with the given title already exists in the specified database.
+    Returns True if found, otherwise False.
+    """
+    try:
+        response = NOTION_CLIENT.databases.query(
+            database_id=database_id,
+            filter={
+                "property": "Name",  # must match the title property in your DB
+                "title": {"equals": page_name},
+            },
+        )
+        return len(response.get("results", [])) > 0  # type: ignore
+    except Exception as e:
+        print(f"Error while checking for existing page: {e}")
+        return False
+
+
 def find_missing_tasks(contacts_list: list):
     """If a task with the name of the client is missing, create it in Notion."""
     print("Creating pages for the tasks...")
@@ -71,19 +90,19 @@ def find_missing_tasks(contacts_list: list):
         title = title_prop[0]["plain_text"] if title_prop else "Untitled"
         existing_tasks.add(title)
 
-    for contact in contacts_list:
-        contact_name = contact[0]
-        if contact_name not in existing_tasks:
-            print(f"Creating new task for: {contact_name}")
+        for contact in contacts_list:
+            contact_name = contact[0]
 
-            print("Creating a page in CRM...")
+            if page_exists_in_database(CRM_DATABASE_ID, contact_name):  # type: ignore
+                print(f"Task already exists for: {contact_name}")
+                continue
+
+            print(f"Creating new task for: {contact_name}")
             crm_page = NOTION_CLIENT.pages.create(
                 parent={"database_id": CRM_DATABASE_ID},
                 properties={
                     "Name": {"title": [{"text": {"content": contact_name}}]},
-                    "Funel": {
-                        "status": {"name": "Leads. Чого так мало?"}  # must exist in DB
-                    },
+                    "Funel": {"status": {"name": "Leads. Чого так мало?"}},
                     "Email": {
                         "email": contact[1] if contact[1] != "No email" else None
                     },
@@ -92,8 +111,6 @@ def find_missing_tasks(contacts_list: list):
                     },
                 },
             )
-
-            # How to I fetch the id of the page?
             CRM_PAGE_ID = crm_page["id"]  # type: ignore
 
             # TODO: Implement adding a task to Production database.
