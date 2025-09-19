@@ -1,147 +1,124 @@
-"""Fetch Gmail messages and send Telegram alerts for new orders"""
+"""Notify the user when a new order is placed"""
 
-import logging
 import os
-import ssl
-import time
-from typing import Any, Dict, Set
-
-import dotenv
-import requests
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
-dotenv.load_dotenv()
-
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-CHECK_INTERVAL = 5 if DEBUG else 900
-MESSAGES_LIMIT = 5
-
-logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    level=logging.DEBUG if DEBUG else logging.INFO,
-)
-logger = logging.getLogger(__name__)
+SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
+TOKEN_FILE = "sync_token.txt"
 
 
-def send_telegram_message(text: str) -> None:
-    """Send a message to the user via Telegram bot."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.error("Missing Telegram credentials. Check your .env or GitHub Secrets.")
-        return
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
-
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        logger.info("✅ Telegram message sent.")
-    except requests.RequestException as e:
-        logger.error("Telegram request failed: %s", e)
-
-
-def get_gmail_service():
-    """Connect to Gmail API using env credentials."""
-    required_vars = [
-        "GMAIL_TOKEN",
-        "GMAIL_REFRESH_TOKEN",
-        "GMAIL_CLIENT_ID",
-        "GMAIL_CLIENT_SECRET",
-    ]
-    missing = [v for v in required_vars if not os.getenv(v)]
-    if missing:
-        raise RuntimeError(f"Missing Gmail secrets: {missing}")
-
+def get_google_service():
+    """Authenticate and return Google People API service."""
     creds_info = {
-        "token": os.getenv("GMAIL_TOKEN"),
-        "refresh_token": os.getenv("GMAIL_REFRESH_TOKEN"),
-        "client_id": os.getenv("GMAIL_CLIENT_ID"),
-        "client_secret": os.getenv("GMAIL_CLIENT_SECRET"),
+        "token": os.getenv("GOOGLE_TOKEN"),
+        "refresh_token": os.getenv("GOOGLE_REFRESH_TOKEN"),
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
         "token_uri": os.getenv(
-            "GMAIL_TOKEN_URI", "https://oauth2.googleapis.com/token"
+            "GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token"
         ),
     }
+
     creds = Credentials.from_authorized_user_info(creds_info, SCOPES)
 
     if creds.expired and creds.refresh_token:
-        logger.info("🔄 Refreshing Gmail credentials...")
         creds.refresh(Request())
 
     if not creds.valid:
-        raise RuntimeError("Gmail credentials invalid even after refresh")
+        raise RuntimeError("❌ Google credentials invalid even after refresh")
 
-    return build("gmail", "v1", credentials=creds)
+    return build("people", "v1", credentials=creds)
 
 
-def fetch_last_messages(service, n: int, seen_ids: Set[str]) -> Set[str]:
-    """Fetch the last n Gmail messages and notify about new orders."""
+def load_sync_token():
+    """Load sync token from file if available."""
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, "r", encoding="UTF-8") as f:
+            return f.read().strip()
+    return None
+
+
+def save_sync_token(token: str):
+    """Save sync token to file."""
+    if token:
+        with open(TOKEN_FILE, "w", encoding="UTF-8") as f:
+            f.write(token)
+        print("💾 Saved new sync token.")
+
+
+def delete_sync_token():
+    """Delete expired sync token file."""
+    if os.path.exists(TOKEN_FILE):
+        os.remove(TOKEN_FILE)
+        print("🗑️ Deleted expired sync token.")
+
+
+def incremental_sync(service, sync_token: str | None):
+    """
+    Perform incremental sync if token available,
+    otherwise perform full sync.
+    """
     try:
-        results = (
-            service.users()
-            .messages()
-            .list(userId="me", maxResults=n, labelIds=["INBOX"])
-            .execute()
-        )
-        messages = results.get("messages", [])
-        if not messages:
-            logger.info("📭 No messages found.")
-            return seen_ids
-
-        for msg in messages:
-            if msg["id"] in seen_ids:
-                continue
-
-            msg_data: Dict[str, Any] = (
-                service.users()
-                .messages()
-                .get(
-                    userId="me",
-                    id=msg["id"],
-                    format="metadata",
-                    metadataHeaders=["Subject", "From", "Date"],
+        if sync_token:
+            print("🔄 Running incremental sync...")
+            results = (
+                service.people()
+                .connections()
+                .list(
+                    resourceName="people/me",
+                    personFields="metadata,names,emailAddresses,phoneNumbers",
+                    syncToken=sync_token,
+                )
+                .execute()
+            )
+        else:
+            print("📥 Running full sync (no token)...")
+            results = (
+                service.people()
+                .connections()
+                .list(
+                    resourceName="people/me",
+                    personFields="metadata,names,emailAddresses,phoneNumbers",
                 )
                 .execute()
             )
 
-            headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
-            subject = headers.get("Subject", "(No subject)")
-            sender = headers.get("From", "(Unknown sender)")
+        return results
 
-            if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
-                text = f"📩 New Order!\nFrom: {sender}\nSubject: {subject}"
-                logger.info(text)
-                send_telegram_message(text)
+    except HttpError as err:
+        if err.resp.status == 400 and "EXPIRED_SYNC_TOKEN" in str(err):
+            print("⚠️ Sync token expired. Resetting...")
+            delete_sync_token()
+            # Retry with full sync
+            results = (
+                service.people()
+                .connections()
+                .list(
+                    resourceName="people/me",
+                    personFields="metadata,names,emailAddresses,phoneNumbers",
+                )
+                .execute()
+            )
+            return results
+        else:
+            raise
 
-            seen_ids.add(msg["id"])
 
-        return seen_ids
+def main():
+    """Run the script"""
+    service = get_google_service()
+    sync_token = load_sync_token()
 
-    except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
-        logger.warning("⚠️ Connection error: %s. Retrying in 15s...", error)
-        time.sleep(15)
-        return seen_ids
+    results = incremental_sync(service, sync_token)
 
+    connections = results.get("connections", [])
+    print(f"✅ Synced {len(connections)} contacts.")
 
-def main() -> None:
-    """Run the Gmail fetcher every CHECK_INTERVAL seconds and notify on new orders."""
-    service = get_gmail_service()
-    seen_ids: Set[str] = set()
-
-    try:
-        while True:
-            seen_ids = fetch_last_messages(service, n=MESSAGES_LIMIT, seen_ids=seen_ids)
-            logger.info("⏳ Waiting before next check...\n")
-            time.sleep(CHECK_INTERVAL)
-    except KeyboardInterrupt:
-        logger.info("🛑 Stopping...")
+    new_token = results.get("nextSyncToken")
+    save_sync_token(new_token)
 
 
 if __name__ == "__main__":
