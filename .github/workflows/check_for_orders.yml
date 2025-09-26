@@ -1,17 +1,25 @@
-name: Check if for new orders on the website
+name: Check for new orders on the website
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch: # allows manual run from GitHub UI
+    - cron: "*/15 * * * *" # run every 15 minutes
+  workflow_dispatch: # allow manual run from GitHub UI
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore seen files cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            seen_ids.txt
+            seen_orders.txt
+          key: seen-files-cache
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -33,3 +41,11 @@ jobs:
           GMAIL_TOKEN_URI: ${{ secrets.GMAIL_TOKEN_URI }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Save seen files cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            seen_ids.txt
+            seen_orders.txt
+          key: seen-files-cache

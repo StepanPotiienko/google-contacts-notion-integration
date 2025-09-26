@@ -3,6 +3,7 @@
 import os
 import ssl
 import time
+import base64
 import requests
 import dotenv
 from google.auth.transport.requests import Request
@@ -17,21 +18,47 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+SEEN_IDS_FILE = "seen_ids.txt"
+SEEN_ORDERS_FILE = "seen_orders.txt"
+
+
+def load_set(filename: str) -> set:
+    """Load seen_ids and seen_orders"""
+    if not os.path.exists(filename):
+        return set()
+    with open(filename, "r", encoding="UTF-8") as f:
+        return set(line.strip() for line in f if line.strip())
+
+
+def save_set(filename: str, data: set):
+    """Save seen_ids_ and seen_orders to a file"""
+    with open(filename, "w", encoding="UTF-8") as f:
+        for item in data:
+            f.write(item + "\n")
+
 
 def send_telegram_message(text: str):
     """Send a message to the user via Telegram bot."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Missing Telegram credentials. Check your .env or GitHub Secrets.")
+    if not check_telegram_credentials():
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+
     try:
         response = requests.post(url, json=payload, timeout=10)
         if response.status_code != 200:
             print(f"❌ Failed to send Telegram message: {response.text}")
     except requests.RequestException as e:
         print(f"❌ Telegram request failed: {e}")
+
+
+def check_telegram_credentials():
+    """Check whether Bot Token and Chat ID are set."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
+        return False
+    return True
 
 
 def get_gmail_service():
@@ -66,14 +93,38 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def fetch_last_messages(service, n=15, seen_ids=None):
+def extract_body(msg_data: dict) -> str:
+    """Extract and decode plain text body from Gmail message."""
+    body = ""
+    payload = msg_data.get("payload", {})
+
+    if "parts" in payload:
+        for part in payload["parts"]:
+            if part.get("mimeType") == "text/plain":
+                data = part["body"].get("data", "")
+                if data:
+                    body = base64.urlsafe_b64decode(data).decode(
+                        "utf-8", errors="ignore"
+                    )
+                    break
+    else:
+        data = payload.get("body", {}).get("data", "")
+        if data:
+            body = base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+
+    return body.strip()
+
+
+def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=None):
     """Fetch the last n Gmail messages and notify about new orders."""
-    if seen_ids is None:
-        seen_ids = set()
+    if seen_ids_set is None:
+        seen_ids_set = set()
+    if seen_orders_set is None:
+        seen_orders_set = set()
 
     try:
         results = (
-            service.users()
+            gmail_service.users()
             .messages()
             .list(userId="me", maxResults=n, labelIds=["INBOX"])
             .execute()
@@ -82,53 +133,65 @@ def fetch_last_messages(service, n=15, seen_ids=None):
 
         if not messages:
             print("No messages found.")
-            return seen_ids
+            return seen_ids_set, seen_orders_set
 
         for msg in messages:
-            if msg["id"] in seen_ids:
+            if msg["id"] in seen_ids_set:
                 continue  # Skip already processed messages
 
             msg_data = (
-                service.users()
+                gmail_service.users()
                 .messages()
-                .get(
-                    userId="me",
-                    id=msg["id"],
-                    format="metadata",
-                    metadataHeaders=["Subject", "From", "Date"],
-                )
+                .get(userId="me", id=msg["id"], format="full")
                 .execute()
             )
 
             headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
             subject = headers.get("Subject", "(No subject)")
             sender = headers.get("From", "(Unknown sender)")
+            body = extract_body(msg_data)
 
-            if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
-                text = f"📩 New Order!\nFrom: {sender}\nSubject: {subject}"
+            # Extract order_id safely
+            cropped_subject = subject.split(" ")
+            order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+
+            if (
+                sender == "info@agropride.com.ua"
+                and "Нове замовлення" in subject
+                and order_id
+                and order_id not in seen_orders_set
+            ):
+                text = (
+                    f"📩 New Order!\n"
+                    f"From: {sender}\n"
+                    f"Subject: {subject}\n\n"
+                    f"📝 Message:\n{body[:1000]}"
+                )
                 print(text)
                 send_telegram_message(text)
+                seen_orders_set.add(order_id)
 
-            seen_ids.add(msg["id"])
+            seen_ids_set.add(msg["id"])
 
-        return seen_ids
+        return seen_ids_set, seen_orders_set
 
     except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
-        print(f"Connection error: {error}.")
+        print(f"⚠️ Connection error: {error}.")
         time.sleep(15)
-        return seen_ids
-
-
-def main():
-    """Run the Gmail fetcher and notify on new orders."""
-    service = get_gmail_service()
-    seen_ids: set = set()
-
-    print("Checking the mail...\n")
-    seen_ids = fetch_last_messages(service, n=5, seen_ids=seen_ids)
-
-    print("Done.")
+        return seen_ids_set, seen_orders_set
 
 
 if __name__ == "__main__":
-    main()
+    service = get_gmail_service()
+    seen_ids = load_set(SEEN_IDS_FILE)
+    seen_orders = load_set(SEEN_ORDERS_FILE)
+
+    print("Checking the mail...\n")
+    seen_ids, seen_orders = fetch_last_messages(
+        service, n=5, seen_ids_set=seen_ids, seen_orders_set=seen_orders
+    )
+
+    save_set(SEEN_IDS_FILE, seen_ids)
+    save_set(SEEN_ORDERS_FILE, seen_orders)
+
+    print("Done.")
