@@ -6,12 +6,15 @@ import time
 import base64
 import requests
 import dotenv
+from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 dotenv.load_dotenv()
+
+DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -23,7 +26,7 @@ SEEN_ORDERS_FILE = "seen_orders.txt"
 
 
 def load_set(filename: str) -> set:
-    """Load seen_ids and seen_orders"""
+    """Load information from a file"""
     if not os.path.exists(filename):
         return set()
     with open(filename, "r", encoding="UTF-8") as f:
@@ -31,14 +34,22 @@ def load_set(filename: str) -> set:
 
 
 def save_set(filename: str, data: set):
-    """Save seen_ids_ and seen_orders to a file"""
+    """Save information to a file"""
     with open(filename, "w", encoding="UTF-8") as f:
         for item in data:
             f.write(item + "\n")
 
 
+def check_telegram_credentials():
+    """Check if Telegram credentials are correct"""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
+        return False
+    return True
+
+
 def send_telegram_message(text: str):
-    """Send a message to multiple Telegram chats via bot."""
+    """Send a message to multiple Telegram accounts"""
     if not check_telegram_credentials():
         return
 
@@ -55,16 +66,8 @@ def send_telegram_message(text: str):
             print(f"❌ Telegram request failed for {chat_id}: {e}")
 
 
-def check_telegram_credentials():
-    """Check whether Bot Token and Chat ID are set."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Missing Telegram credentials. Check your .env or GitHub Secrets.")
-        return False
-    return True
-
-
 def get_gmail_service():
-    """Connect to Gmail API using env credentials."""
+    """Connect to gmail service"""
     required_vars = [
         "GMAIL_TOKEN",
         "GMAIL_REFRESH_TOKEN",
@@ -95,31 +98,102 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-# TODO: Proper fetching. Now it just fetches HTML code.
 def extract_body(msg_data: dict) -> str:
-    """Extract and decode plain text body from Gmail message."""
-    body = ""
+    """Extract only HTML body from Gmail message."""
     payload = msg_data.get("payload", {})
 
+    def decode_data(data: str) -> str:
+        return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+
+    def walk_parts(parts):
+        for part in parts:
+            mime = part.get("mimeType", "")
+            data = part.get("body", {}).get("data", "")
+            if mime == "text/html" and data:
+                return decode_data(data)
+            if part.get("parts"):  # recursive search
+                html = walk_parts(part["parts"])
+                if html:
+                    return html
+        return ""
+
     if "parts" in payload:
-        for part in payload["parts"]:
-            if part.get("mimeType") == "text/plain":
-                data = part["body"].get("data", "")
-                if data:
-                    body = base64.urlsafe_b64decode(data).decode(
-                        "utf-8", errors="ignore"
-                    )
-                    break
+        return walk_parts(payload["parts"]).strip()
     else:
         data = payload.get("body", {}).get("data", "")
-        if data:
-            body = base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+        if data and payload.get("mimeType") == "text/html":
+            return decode_data(data).strip()
 
-    return body.strip()
+    return ""
+
+
+def parse_order_email(html: str) -> dict:  # type: ignore
+    """Parse Agropride order email and extract structured data."""
+    soup = BeautifulSoup(html, "html.parser")
+    result = {}
+
+    def extract_bold(label: str) -> str:
+        el = soup.find("b", string=lambda t: t and label in t)  # type: ignore
+        if el:
+            text = ""
+            if el.next_sibling and isinstance(el.next_sibling, str):
+                text = el.next_sibling.strip()
+            else:
+                text = el.parent.get_text(strip=True).replace(label, "")
+            return text
+        return ""
+
+    result["Ім'я одержувача"] = extract_bold("Ім'я одержувача:")
+    result["Телефон"] = extract_bold("Телефон:")
+    result["Адреса доставки"] = extract_bold("За адресою:")
+    result["Оплата"] = extract_bold("Оплата:")
+    result["Сума замовлення"] = extract_bold("Сума замовлення:")
+    result["Доставка"] = extract_bold("Доставка:")
+    result["Разом до оплати"] = extract_bold("Разом до оплати:")
+
+    product_table = soup.find("table", {"style": "width:100%;border-collapse:collapse"})
+    if product_table:
+        row = product_table.find("tbody").find("tr")  # type: ignore
+        cols = row.find_all("td")  # type: ignore
+        if len(cols) >= 3:
+            product_info = cols[0].get_text(" ", strip=True)
+            qty = cols[1].get_text(" ", strip=True)
+            price = cols[2].get_text(" ", strip=True)
+            result["Товар"] = product_info
+            result["Кількість"] = qty
+            result["Сума"] = price
+
+            if "Артикул:" in product_info:
+                result["Артикул"] = product_info.split("Артикул:")[1].split()[0]
+            if "Ціна за одиницю:" in product_info:
+                result["Ціна за одиницю"] = product_info.split("Ціна за одиницю:")[
+                    1
+                ].strip()
+
+    return result
+
+
+def format_order_for_telegram(data: dict, subject: str) -> str:
+    """Format parsed order data for Telegram message."""
+    return (
+        f"📦 Нове замовлення!\n"
+        f"Subject: {subject}\n\n"
+        f"👤 {data.get('Ім\'я одержувача', '-')}\n"
+        f"📞 {data.get('Телефон', '-')}\n"
+        f"📍 {data.get('Адреса доставки', '-')}\n"
+        f"💳 Оплата: {data.get('Оплата', '-')}\n"
+        f"💰 Сума: {data.get('Сума замовлення', '-')}\n"
+        f"🚚 Доставка: {data.get('Доставка', '-')}\n"
+        f"✅ Разом: {data.get('Разом до оплати', '-')}\n\n"
+        f"🛒 {data.get('Товар', '-')}\n"
+        f"📦 Кількість: {data.get('Кількість', '-')}\n"
+        f"💵 Ціна за од.: {data.get('Ціна за одиницю', '-')}\n"
+        f"📑 Артикул: {data.get('Артикул', '-')}"
+    )
 
 
 def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=None):
-    """Fetch the last n Gmail messages and notify about new orders."""
+    """Fetch last n messages from Gmail that match Agropride order conditions."""
     if seen_ids_set is None:
         seen_ids_set = set()
     if seen_orders_set is None:
@@ -138,43 +212,42 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             print("No messages found.")
             return seen_ids_set, seen_orders_set
 
+        # Collect only messages that match sender and subject
+        matching_messages = []
         for msg in messages:
-            if msg["id"] in seen_ids_set:
-                continue  # Skip already processed messages
-
             msg_data = (
                 gmail_service.users()
                 .messages()
                 .get(userId="me", id=msg["id"], format="full")
                 .execute()
             )
-
             headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
-            subject = headers.get("Subject", "(No subject)")
-            sender = headers.get("From", "(Unknown sender)")
-            body = extract_body(msg_data)
+            sender = headers.get("From", "")
+            subject = headers.get("Subject", "")
 
-            # Extract order_id safely
-            cropped_subject = subject.split(" ")
-            order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+            if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
+                matching_messages.append((msg, subject, msg_data))
 
-            if (
-                sender == "info@agropride.com.ua"
-                and "Нове замовлення" in subject
-                and order_id
-                and order_id not in seen_orders_set
-            ):
-                text = (
-                    f"📩 New Order!\n"
-                    f"From: {sender}\n"
-                    f"Subject: {subject}\n\n"
-                    f"📝 Message:\n{body[:1000]}"
-                )
-                print(text)
-                send_telegram_message(text)
-                seen_orders_set.add(order_id)
+        if not matching_messages:
+            print("No matching Agropride orders found.")
+            return seen_ids_set, seen_orders_set
 
-            seen_ids_set.add(msg["id"])
+        # DEBUG: take only the last matching message
+        msg, subject, msg_data = matching_messages[-1]
+        if not DEBUG and msg["id"] in seen_ids_set:
+            print("No new messages to process.")
+            return seen_ids_set, seen_orders_set
+
+        body_html = extract_body(msg_data)
+        if body_html:
+            order_data = parse_order_email(body_html)
+            text = format_order_for_telegram(order_data, subject)
+            send_telegram_message(text)
+
+        cropped_subject = subject.split(" ")
+        order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+        seen_orders_set.add(order_id)
+        seen_ids_set.add(msg["id"])
 
         return seen_ids_set, seen_orders_set
 
