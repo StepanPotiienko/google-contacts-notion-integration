@@ -38,19 +38,21 @@ def save_set(filename: str, data: set):
 
 
 def send_telegram_message(text: str):
-    """Send a message to the user via Telegram bot."""
+    """Send a message to multiple Telegram chats via bot."""
     if not check_telegram_credentials():
         return
 
+    chat_ids = [cid.strip() for cid in str(TELEGRAM_CHAT_ID).split(",") if cid.strip()]
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
 
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code != 200:
-            print(f"❌ Failed to send Telegram message: {response.text}")
-    except requests.RequestException as e:
-        print(f"❌ Telegram request failed: {e}")
+    for chat_id in chat_ids:
+        payload = {"chat_id": chat_id, "text": text}
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            if response.status_code != 200:
+                print(f"❌ Failed to send message to {chat_id}: {response.text}")
+        except requests.RequestException as e:
+            print(f"❌ Telegram request failed for {chat_id}: {e}")
 
 
 def check_telegram_credentials():
@@ -93,6 +95,7 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
+# TODO: Proper fetching. Now it just fetches HTML code.
 def extract_body(msg_data: dict) -> str:
     """Extract and decode plain text body from Gmail message."""
     body = ""
