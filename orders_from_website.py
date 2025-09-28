@@ -132,16 +132,22 @@ def parse_order_email(html: str) -> dict:  # type: ignore
     soup = BeautifulSoup(html, "html.parser")
     result = {}
 
-    def extract_bold(label: str) -> str:
+    def extract_bold(label: str):
+        """Extract text after a <b> label in HTML email."""
         el = soup.find("b", string=lambda t: t and label in t)  # type: ignore
-        if el:
-            text = ""
-            if el.next_sibling and isinstance(el.next_sibling, str):
-                text = el.next_sibling.strip()
-            else:
-                text = el.parent.get_text(strip=True).replace(label, "")
-            return text
-        return ""
+        if not el:
+            return "-"
+
+        # Try next sibling if it's a string
+        if el.next_sibling and isinstance(el.next_sibling, str):
+            text = el.next_sibling.strip()
+            if text:
+                return text
+
+        parent_text = el.parent.get_text(" ", strip=True)
+        text = parent_text.replace(label, "").strip()
+
+        return text if text else "-"
 
     result["Ім'я одержувача"] = extract_bold("Ім'я одержувача:")
     result["Телефон"] = extract_bold("Телефон:")
@@ -176,21 +182,21 @@ def parse_order_email(html: str) -> dict:  # type: ignore
 def format_order_for_telegram(data: dict, subject: str) -> str:
     """Format parsed order data for Telegram message."""
     return f"""📦 Нове замовлення!
-        Subject: {subject}
+Subject: {subject}
 
-        👤 {data.get("Ім'я одержувача", '-')}
-        📞 {data.get('Телефон', '-')}
-        📍 {data.get('Адреса доставки', '-')}
-        💳 Оплата: {data.get('Оплата', '-')}
-        💰 Сума: {data.get('Сума замовлення', '-')}
-        🚚 Доставка: {data.get('Доставка', '-')}
-        ✅ Разом: {data.get('Разом до оплати', '-')}
+👤 {data.get("Ім'я одержувача", '-')}
+📞 {data.get('Телефон', '-')}
+📍 {data.get('Адреса доставки', '-')}
+💳 Оплата: {data.get('Оплата', '-')}
+💰 Сума: {data.get('Сума замовлення', '-')}
+🚚 Доставка: {data.get('Доставка', '-')}
+✅ Разом: {data.get('Разом до оплати', '-')}
 
-        🛒 {data.get('Товар', '-')}
-        📦 Кількість: {data.get('Кількість', '-')}
-        💵 Ціна за од.: {data.get('Ціна за одиницю', '-')}
-        📑 Артикул: {data.get('Артикул', '-')}"
-        """
+🛒 {data.get('Товар', '-')}
+📦 Кількість: {data.get('Кількість', '-') if data.get('Кількість') else '-'}
+💵 Ціна за од.: {data.get('Ціна за одиницю', '-') if data.get('Ціна за одиницю') else '-'}
+📑 Артикул: {data.get('Артикул', '-') if data.get('Артикул') else '-'}
+"""
 
 
 def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=None):
