@@ -138,7 +138,6 @@ def parse_order_email(html: str) -> dict:  # type: ignore
         if not el:
             return "-"
 
-        # Try next sibling if it's a string
         if el.next_sibling and isinstance(el.next_sibling, str):
             text = el.next_sibling.strip()
             if text:

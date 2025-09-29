@@ -14,15 +14,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Restore seen files cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             seen_ids.txt
             seen_orders.txt
           key: seen-files-cache
+          restore-keys: seen-files-cache
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
