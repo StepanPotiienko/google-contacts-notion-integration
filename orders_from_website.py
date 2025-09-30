@@ -231,6 +231,13 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             sender = headers.get("From", "")
             subject = headers.get("Subject", "")
 
+            cropped_subject = subject.split(" ")
+            order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+
+            if order_id in seen_ids_set or order_id in seen_orders_set:
+                print("No new orders.")
+                return seen_ids_set, seen_orders_set
+
             if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
                 matching_messages.append((msg, subject, msg_data))
 
@@ -250,9 +257,7 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             text = format_order_for_telegram(order_data, subject)
             send_telegram_message(text)
 
-        cropped_subject = subject.split(" ")
-        order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
-        seen_orders_set.add(order_id)
+        seen_orders_set.add(order_id)  # type: ignore
         seen_ids_set.add(msg["id"])
 
         return seen_ids_set, seen_orders_set
