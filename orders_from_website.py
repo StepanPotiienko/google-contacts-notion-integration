@@ -29,15 +29,15 @@ def load_set(filename: str) -> set:
     """Load information from a file"""
     if not os.path.exists(filename):
         return set()
-    with open(filename, "r", encoding="UTF-8") as f:
-        return set(line.strip() for line in f if line.strip())
+    with open(filename, "r", encoding="UTF-8") as load_file:
+        return set(line.strip() for line in load_file if line.strip())
 
 
 def save_set(filename: str, data: set):
     """Save information to a file"""
-    with open(filename, "w", encoding="UTF-8") as f:
+    with open(filename, "w", encoding="UTF-8") as save_file:
         for item in data:
-            f.write(item + "\n")
+            save_file.write(item + "\n")
 
 
 def check_telegram_credentials():

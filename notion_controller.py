@@ -1,6 +1,7 @@
 """Notion related stuff"""
 
 import os
+import time
 import dotenv
 from notion_client import Client
 
@@ -19,16 +20,7 @@ def connect_to_notion_database():
 
     print("Listing tasks from Notion database...")
 
-    results = NOTION_CLIENT.databases.query(
-        database_id=CRM_DATABASE_ID  # type: ignore
-        # In case I need to filter something.
-        # filter={
-        #     "property": "Status",
-        #     "status": {
-        #         "equals": "Name of the property"
-        #     }
-        # }
-    )
+    results = NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID)  # type: ignore
 
     for page in results["results"]:  # type: ignore
         props = page["properties"]
@@ -61,18 +53,14 @@ def page_exists_in_database(database_id: str, page_name: str) -> bool:
     Check whether a page with the given title already exists in the specified database.
     Returns True if found, otherwise False.
     """
-    try:
-        response = NOTION_CLIENT.databases.query(
-            database_id=database_id,
-            filter={
-                "property": "Name",  # must match the title property in your DB
-                "title": {"equals": page_name},
-            },
-        )
-        return len(response.get("results", [])) > 0  # type: ignore
-    except Exception as e:
-        print(f"Error while checking for existing page: {e}")
-        return False
+    response = NOTION_CLIENT.databases.query(
+        database_id=database_id,
+        filter={
+            "property": "Name",  # must match the title property in your DB
+            "title": {"equals": page_name},
+        },
+    )
+    return len(response.get("results", [])) > 0  # type: ignore
 
 
 def find_missing_tasks(contacts_list: list):
@@ -95,6 +83,7 @@ def find_missing_tasks(contacts_list: list):
 
             if page_exists_in_database(CRM_DATABASE_ID, contact_name):  # type: ignore
                 print(f"Task already exists for: {contact_name}")
+                time.sleep(10)
                 continue
 
             print(f"Creating new task for: {contact_name}")
@@ -102,7 +91,6 @@ def find_missing_tasks(contacts_list: list):
                 parent={"database_id": CRM_DATABASE_ID},
                 properties={
                     "Name": {"title": [{"text": {"content": contact_name}}]},
-                    "Funel": {"status": {"name": "Leads. Чого так мало?"}},
                     "Email": {
                         "email": contact[1] if contact[1] != "No email" else None
                     },
