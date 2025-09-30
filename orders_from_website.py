@@ -234,30 +234,32 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             cropped_subject = subject.split(" ")
             order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
 
-            if order_id in seen_ids_set or order_id in seen_orders_set:
-                print("No new orders.")
-                return seen_ids_set, seen_orders_set
+            # перевіряємо дублікати саме по order_id
+            if order_id and order_id in seen_orders_set:
+                print(f"⚠️ Order {order_id} already processed, skipping.")
+                continue
 
             if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
-                matching_messages.append((msg, subject, msg_data))
+                matching_messages.append((msg, subject, msg_data, order_id))
 
         if not matching_messages:
             print("No matching Agropride orders found.")
             return seen_ids_set, seen_orders_set
 
-        # DEBUG: take only the last matching message
-        msg, subject, msg_data = matching_messages[-1]
-        if not DEBUG and msg["id"] in seen_ids_set:
-            print("No new messages to process.")
-            return seen_ids_set, seen_orders_set
+        # DEBUG: беремо тільки останнє повідомлення
+        msg, subject, msg_data, order_id = matching_messages[-1]
 
         body_html = extract_body(msg_data)
         if body_html:
             order_data = parse_order_email(body_html)
             text = format_order_for_telegram(order_data, subject)
             send_telegram_message(text)
+            print(f"✅ Sent order {order_id} to Telegram")
 
-        seen_orders_set.add(order_id)  # type: ignore
+        # додаємо order_id у список оброблених навіть якщо тіло не спарсилось
+        if order_id:
+            seen_orders_set.add(order_id)
+
         seen_ids_set.add(msg["id"])
 
         return seen_ids_set, seen_orders_set
@@ -266,6 +268,28 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
         print(f"⚠️ Connection error: {error}.")
         time.sleep(15)
         return seen_ids_set, seen_orders_set
+
+
+if __name__ == "__main__":
+    # Ensure files exist so cache has something to save
+    for file in (SEEN_IDS_FILE, SEEN_ORDERS_FILE):
+        if not os.path.exists(file):
+            with open(file, "w", encoding="UTF-8") as f:
+                f.write("")
+
+    service = get_gmail_service()
+    seen_ids = load_set(SEEN_IDS_FILE)
+    seen_orders = load_set(SEEN_ORDERS_FILE)
+
+    print("Checking the mail...\n")
+    seen_ids, seen_orders = fetch_last_messages(
+        service, n=5, seen_ids_set=seen_ids, seen_orders_set=seen_orders
+    )
+
+    save_set(SEEN_IDS_FILE, seen_ids)
+    save_set(SEEN_ORDERS_FILE, seen_orders)
+
+    print("Done.")
 
 
 if __name__ == "__main__":
