@@ -95,7 +95,15 @@ def find_missing_tasks(contacts_list: list):
                         "email": contact[1] if contact[1] != "No email" else None
                     },
                     "Phone": {
-                        "rich_text": contact[2] if contact[2] != "No phone" else None
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": (
+                                        contact[2] if contact[2] != "No phone" else None
+                                    )
+                                }
+                            }
+                        ]
                     },
                 },
             )
