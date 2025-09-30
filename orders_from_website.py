@@ -269,6 +269,11 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
 
 
 if __name__ == "__main__":
+    for file in (SEEN_IDS_FILE, SEEN_ORDERS_FILE):
+        if not os.path.exists(file):
+            with open(file, "w", encoding="UTF-8") as f:
+                f.write("")
+
     service = get_gmail_service()
     seen_ids = load_set(SEEN_IDS_FILE)
     seen_orders = load_set(SEEN_ORDERS_FILE)
