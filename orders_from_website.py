@@ -234,7 +234,6 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             cropped_subject = subject.split(" ")
             order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
 
-            # перевіряємо дублікати саме по order_id
             if order_id and order_id in seen_orders_set:
                 print(f"⚠️ Order {order_id} already processed, skipping.")
                 continue
@@ -246,17 +245,15 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             print("No matching Agropride orders found.")
             return seen_ids_set, seen_orders_set
 
-        # DEBUG: беремо тільки останнє повідомлення
         msg, subject, msg_data, order_id = matching_messages[-1]
 
         body_html = extract_body(msg_data)
-        if body_html:
+        if body_html and order_id and order_id not in seen_orders_set:
             order_data = parse_order_email(body_html)
             text = format_order_for_telegram(order_data, subject)
             send_telegram_message(text)
             print(f"✅ Sent order {order_id} to Telegram")
 
-        # додаємо order_id у список оброблених навіть якщо тіло не спарсилось
         if order_id:
             seen_orders_set.add(order_id)
 
