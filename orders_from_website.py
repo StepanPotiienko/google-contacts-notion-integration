@@ -4,6 +4,7 @@ import os
 import ssl
 import time
 import base64
+import json
 import requests
 import dotenv
 from bs4 import BeautifulSoup
@@ -15,29 +16,40 @@ from googleapiclient.errors import HttpError
 dotenv.load_dotenv()
 
 DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
-
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-SEEN_IDS_FILE = "seen_ids.txt"
-SEEN_ORDERS_FILE = "seen_orders.txt"
+TRACKING_FILE = "order_tracking.json"
 
 
-def load_set(filename: str) -> set:
-    """Load information from a file"""
-    if not os.path.exists(filename):
-        return set()
-    with open(filename, "r", encoding="UTF-8") as load_file:
-        return set(line.strip() for line in load_file if line.strip())
+def load_tracking_data():
+    """Load tracking data from JSON file"""
+    if not os.path.exists(TRACKING_FILE):
+        return {"seen_ids": set(), "seen_orders": set()}
+
+    try:
+        with open(TRACKING_FILE, "r", encoding="UTF-8") as f:
+            data = json.load(f)
+            return {
+                "seen_ids": set(data.get("seen_ids", [])),
+                "seen_orders": set(data.get("seen_orders", [])),
+            }
+    except (json.JSONDecodeError, KeyError):
+        return {"seen_ids": set(), "seen_orders": set()}
 
 
-def save_set(filename: str, data: set):
-    """Save information to a file"""
-    with open(filename, "w", encoding="UTF-8") as save_file:
-        for item in data:
-            save_file.write(item + "\n")
+def save_tracking_data(tracking_data):
+    """Save tracking data to JSON file"""
+    with open(TRACKING_FILE, "w", encoding="UTF-8") as f:
+        json.dump(
+            {
+                "seen_ids": list(tracking_data["seen_ids"]),
+                "seen_orders": list(tracking_data["seen_orders"]),
+            },
+            f,
+            indent=2,
+        )
 
 
 def check_telegram_credentials():
@@ -111,7 +123,7 @@ def extract_body(msg_data: dict) -> str:
             data = part.get("body", {}).get("data", "")
             if mime == "text/html" and data:
                 return decode_data(data)
-            if part.get("parts"):  # recursive search
+            if part.get("parts"):
                 html = walk_parts(part["parts"])
                 if html:
                     return html
@@ -127,7 +139,7 @@ def extract_body(msg_data: dict) -> str:
     return ""
 
 
-def parse_order_email(html: str) -> dict:  # type: ignore
+def parse_order_email(html: str) -> dict:
     """Parse Agropride order email and extract structured data."""
     soup = BeautifulSoup(html, "html.parser")
     result = {}
@@ -198,13 +210,24 @@ Subject: {subject}
 """
 
 
-def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=None):
-    """Fetch last n messages from Gmail that match Agropride order conditions."""
-    if seen_ids_set is None:
-        seen_ids_set = set()
-    if seen_orders_set is None:
-        seen_orders_set = set()
+def extract_order_id(subject: str) -> str:
+    """Extract order ID from subject line"""
+    try:
+        parts = subject.split()
+        for part in parts:
+            if part.startswith("#"):
+                return part[1:]
+        # Fallback: look for any numbers in subject
+        import re
 
+        numbers = re.findall(r"\d+", subject)
+        return numbers[0] if numbers else subject
+    except Exception:
+        return subject
+
+
+def fetch_last_messages(gmail_service, tracking_data, n=15):
+    """Fetch last n messages and process new orders"""
     try:
         results = (
             gmail_service.users()
@@ -216,75 +239,86 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
 
         if not messages:
             print("No messages found.")
-            return seen_ids_set, seen_orders_set
+            return tracking_data
 
-        matching_messages = []
+        new_orders_found = 0
+
         for msg in messages:
+            msg_id = msg["id"]
+
+            # Skip if we've already seen this message
+            if msg_id in tracking_data["seen_ids"]:
+                continue
+
             msg_data = (
                 gmail_service.users()
                 .messages()
-                .get(userId="me", id=msg["id"], format="full")
+                .get(userId="me", id=msg_id, format="full")
                 .execute()
             )
+
             headers = {h["name"]: h["value"] for h in msg_data["payload"]["headers"]}
             sender = headers.get("From", "")
             subject = headers.get("Subject", "")
 
-            if sender != "info@agropride.com.ua" and not "Нове замовлення" in subject:
-                continue
+            # Check if it's an Agropride order
+            if "info@agropride.com.ua" in sender and "Нове замовлення" in subject:
+                order_id = extract_order_id(subject)
 
-            cropped_subject = subject.split(" ")
-            order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+                # Skip if order was already processed
+                if order_id in tracking_data["seen_orders"]:
+                    print(f"⚠️ Order {order_id} already processed, skipping.")
+                    tracking_data["seen_ids"].add(msg_id)  # Mark message as seen
+                    continue
 
-            if order_id in seen_orders_set or order_id in seen_ids_set:
-                print(f"⚠️ Order {order_id} already processed, skipping.")
-                return
+                print(f"🆕 New order found: {order_id}")
+                body_html = extract_body(msg_data)
 
-            if sender == "info@agropride.com.ua" and "Нове замовлення" in subject:
-                matching_messages.append((msg, subject, msg_data, order_id))
+                if body_html:
+                    order_data = parse_order_email(body_html)
+                    text = format_order_for_telegram(order_data, subject)
+                    send_telegram_message(text)
 
-        if not matching_messages:
-            print("No matching Agropride orders found.")
-            return seen_ids_set, seen_orders_set
+                    # Mark as processed
+                    tracking_data["seen_ids"].add(msg_id)
+                    tracking_data["seen_orders"].add(order_id)
+                    new_orders_found += 1
 
-        msg, subject, msg_data, order_id = matching_messages[-1]
+                    print(f"✅ Sent order {order_id} to Telegram")
+                else:
+                    print(f"❌ Could not extract body for order {order_id}")
+            else:
+                # Mark non-order messages as seen
+                tracking_data["seen_ids"].add(msg_id)
 
-        body_html = extract_body(msg_data)
-        if body_html and order_id and order_id not in seen_orders_set:
-            order_data = parse_order_email(body_html)
-            text = format_order_for_telegram(order_data, subject)
-            send_telegram_message(text)
-            print(f"✅ Sent order {order_id} to Telegram")
-
-        if order_id:
-            seen_orders_set.add(order_id)
-
-        seen_ids_set.add(msg["id"])
-
-        return seen_ids_set, seen_orders_set
+        print(f"📊 Found {new_orders_found} new orders")
+        return tracking_data
 
     except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
-        print(f"⚠️ Connection error: {error}.")
+        print(f"⚠️ Connection error: {error}")
         time.sleep(15)
-        return seen_ids_set, seen_orders_set
+        return tracking_data
 
 
 if __name__ == "__main__":
-    for file in (SEEN_IDS_FILE, SEEN_ORDERS_FILE):
-        if not os.path.exists(file):
-            with open(file, "w", encoding="UTF-8") as f:
-                f.write("")
+    if not os.path.exists(TRACKING_FILE):
+        save_tracking_data({"seen_ids": set(), "seen_orders": set()})
 
-    service = get_gmail_service()
-    seen_ids = load_set(SEEN_IDS_FILE)
-    seen_orders = load_set(SEEN_ORDERS_FILE)
+    try:
+        service = get_gmail_service()
+        tracking_data = load_tracking_data()
 
-    print("Checking the mail...\n")
-    seen_ids, seen_orders = fetch_last_messages(
-        service, n=5, seen_ids_set=seen_ids, seen_orders_set=seen_orders
-    )
+        print(
+            f"📊 Previously seen: {len(tracking_data['seen_ids'])} messages, {len(tracking_data['seen_orders'])} orders"
+        )
+        print("🔍 Checking for new orders...")
 
-    save_set(SEEN_IDS_FILE, seen_ids)
-    save_set(SEEN_ORDERS_FILE, seen_orders)
+        tracking_data = fetch_last_messages(service, tracking_data, n=5)
+        save_tracking_data(tracking_data)
 
-    print("Done.")
+        print(
+            f"✅ Done. Now tracking {len(tracking_data['seen_ids'])} messages and {len(tracking_data['seen_orders'])} orders"
+        )
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
