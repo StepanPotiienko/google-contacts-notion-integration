@@ -230,7 +230,11 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             sender = headers.get("From", "")
             subject = headers.get("Subject", "")
 
+            if sender != "info@agropride.com.ua" and not "Нове замовлення" in subject:
+                continue
+
             cropped_subject = subject.split(" ")
+            print("Cropped subject:", cropped_subject)
             order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
             print("Order id:", order_id)
 
