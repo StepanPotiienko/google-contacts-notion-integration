@@ -232,7 +232,7 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
 
             cropped_subject = subject.split(" ")
             order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
-            print(order_id)
+            print("Order id:", order_id)
 
             if order_id in seen_orders_set or order_id in seen_ids_set:
                 print(f"⚠️ Order {order_id} already processed, skipping.")
