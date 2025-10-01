@@ -37,7 +37,7 @@ jobs:
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
           GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
-        run: python your_script_name.py
+        run: python orders_from_website.py
 
       - name: Save tracking cache
         uses: actions/cache@v3
