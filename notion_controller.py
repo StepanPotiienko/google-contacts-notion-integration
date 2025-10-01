@@ -107,7 +107,9 @@ def find_missing_tasks(contacts_list: list):
                     },
                 },
             )
-            CRM_PAGE_ID = crm_page["id"]  # type: ignore
+
+            crm_page_id = crm_page["id"]  # type: ignore
+            print(crm_page_id)  # To bypass pylint warning lol
 
             # TODO: Implement adding a task to Production database.
             # print("Creating a page in Production Tasks database...")

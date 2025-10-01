@@ -218,7 +218,6 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
             print("No messages found.")
             return seen_ids_set, seen_orders_set
 
-        # Collect only messages that match sender and subject
         matching_messages = []
         for msg in messages:
             msg_data = (
@@ -233,8 +232,9 @@ def fetch_last_messages(gmail_service, n=15, seen_ids_set=None, seen_orders_set=
 
             cropped_subject = subject.split(" ")
             order_id = cropped_subject[2][1:] if len(cropped_subject) > 2 else None
+            print(order_id)
 
-            if order_id and order_id in seen_orders_set:
+            if order_id in seen_orders_set or order_id in seen_ids_set:
                 print(f"⚠️ Order {order_id} already processed, skipping.")
                 return
 
