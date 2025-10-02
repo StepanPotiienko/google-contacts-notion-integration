@@ -1,6 +1,7 @@
 """Module for fetching Gmail messages and notifying via Telegram about new orders."""
 
 import os
+import re
 import ssl
 import time
 import base64
@@ -39,13 +40,13 @@ def load_tracking_data():
         return {"seen_ids": set(), "seen_orders": set()}
 
 
-def save_tracking_data(tracking_data):
+def save_tracking_data(data):
     """Save tracking data to JSON file"""
     with open(TRACKING_FILE, "w", encoding="UTF-8") as f:
         json.dump(
             {
-                "seen_ids": list(tracking_data["seen_ids"]),
-                "seen_orders": list(tracking_data["seen_orders"]),
+                "seen_ids": list(data["seen_ids"]),
+                "seen_orders": list(data["seen_orders"]),
             },
             f,
             indent=2,
@@ -110,6 +111,24 @@ def get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
+def find_order_div(soup):
+    """Find the order div with dynamic ID"""
+    div = soup.find("div", id=re.compile(r"^m_.*body$"))
+    if div:
+        return div
+
+    potential_divs = soup.find_all("div")
+    for div in potential_divs:
+        if (
+            div.find("strong", string=re.compile("Номер замовлення"))
+            and div.find("th", string="Товар")
+            and div.find("th", string="Кількість")
+        ):
+            return div
+
+    return None
+
+
 def extract_body(msg_data: dict) -> str:
     """Extract only HTML body from Gmail message."""
     payload = msg_data.get("payload", {})
@@ -139,6 +158,91 @@ def extract_body(msg_data: dict) -> str:
     return ""
 
 
+def extract_products_from_table(soup):
+    """Extract multiple products from the order table"""
+    products = []
+
+    tables = soup.find_all("table")
+    product_table = None
+
+    for table in tables:
+        headers = table.find_all("th")
+        header_texts = [header.get_text(strip=True) for header in headers]
+        if (
+            "Товар" in header_texts
+            and "Кількість" in header_texts
+            and "Сума" in header_texts
+        ):
+            product_table = table
+            break
+
+    if not product_table:
+        print("❌ Could not find product table")
+        return products
+
+    print("✅ Found product table")
+
+    rows = []
+    if product_table.find("tbody"):
+        rows = product_table.find("tbody").find_all("tr")
+    else:
+        all_rows = product_table.find_all("tr")
+        rows = [row for row in all_rows if not row.find("th")]
+
+    print(f"📊 Found {len(rows)} product rows")
+
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) == 3:
+            # Column 0: Product info (name, article, unit price)
+            # Column 1: Quantity
+            # Column 2: Total price
+
+            product_col = cols[0]
+            quantity_col = cols[1]
+            price_col = cols[2]
+
+            product_text = product_col.get_text(" ", strip=True)
+            product_name = product_text.split("Артикул:")[0].strip()
+
+            if any(
+                keyword in product_name for keyword in ["Товар", "Кількість", "Сума"]
+            ):
+                print("⏩ Skipping header row")
+                continue
+
+            quantity = quantity_col.get_text(" ", strip=True)
+
+            total_price = price_col.get_text(" ", strip=True)
+
+            article = None
+            if "Артикул:" in product_text:
+                article_part = product_text.split("Артикул:")[1]
+                article = (
+                    article_part.split()[0].strip() if article_part.split() else None
+                )
+
+            unit_price = None
+            if "Ціна за одиницю:" in product_text:
+                price_part = product_text.split("Ціна за одиницю:")[1]
+                unit_price = (
+                    price_part.split("грн")[0].strip()
+                    if "грн" in price_part
+                    else price_part.strip()
+                )
+
+            product_data = {
+                "name": product_name,
+                "quantity": quantity,
+                "total_price": total_price,
+                "article": article,
+                "unit_price": unit_price,
+            }
+            products.append(product_data)
+
+    return products
+
+
 def parse_order_email(html: str) -> dict:
     """Parse Agropride order email and extract structured data."""
     soup = BeautifulSoup(html, "html.parser")
@@ -162,52 +266,59 @@ def parse_order_email(html: str) -> dict:
 
     result["Ім'я одержувача"] = extract_bold("Ім'я одержувача:")
     result["Телефон"] = extract_bold("Телефон:")
-    result["Адреса доставки"] = extract_bold("За адресою:")
     result["Оплата"] = extract_bold("Оплата:")
     result["Сума замовлення"] = extract_bold("Сума замовлення:")
     result["Доставка"] = extract_bold("Доставка:")
     result["Разом до оплати"] = extract_bold("Разом до оплати:")
 
-    product_table = soup.find("table", {"style": "width:100%;border-collapse:collapse"})
-    if product_table:
-        row = product_table.find("tbody").find("tr")  # type: ignore
-        cols = row.find_all("td")  # type: ignore
-        if len(cols) >= 3:
-            product_info = cols[0].get_text(" ", strip=True)
-            qty = cols[1].get_text(" ", strip=True)
-            price = cols[2].get_text(" ", strip=True)
-            result["Товар"] = product_info
-            result["Кількість"] = qty
-            result["Сума"] = price
+    order_info = soup.find("p")
+    if order_info and order_info.find("strong"):
+        order_text = order_info.get_text()
+        order_match = re.search(r"#(\d+)\s*\((.*?)\)", order_text)
+        if order_match:
+            result["Номер замовлення"] = order_match.group(1)
+            result["Дата замовлення"] = order_match.group(2)
 
-            if "Артикул:" in product_info:
-                result["Артикул"] = product_info.split("Артикул:")[1].split()[0]
-            if "Ціна за одиницю:" in product_info:
-                result["Ціна за одиницю"] = product_info.split("Ціна за одиницю:")[
-                    1
-                ].strip()
+    result["products"] = extract_products_from_table(soup)
 
     return result
 
 
 def format_order_for_telegram(data: dict, subject: str) -> str:
     """Format parsed order data for Telegram message."""
-    return f"""📦 Нове замовлення!
-Subject: {subject}
+    message_parts = [
+        "📦 Нове замовлення!",
+        f"Тема: {subject}",
+        "",
+        f"👤 {data.get("Ім'я одержувача", '-')}",
+        f"📞 {data.get('Телефон', '-')}",
+        f"💳 Оплата: {data.get('Оплата', '-')}",
+        f"💰 Сума: {data.get('Сума замовлення', '-')}",
+        f"🚚 Доставка: {data.get('Доставка', '-')}",
+        f"✅ Разом: {data.get('Разом до оплати', '-')}",
+        "",
+    ]
 
-👤 {data.get("Ім'я одержувача", '-')}
-📞 {data.get('Телефон', '-')}
-📍 {data.get('Адреса доставки', '-')}
-💳 Оплата: {data.get('Оплата', '-')}
-💰 Сума: {data.get('Сума замовлення', '-')}
-🚚 Доставка: {data.get('Доставка', '-')}
-✅ Разом: {data.get('Разом до оплати', '-')}
+    if "Номер замовлення" in data:
+        message_parts.insert(1, f"Номер: #{data['Номер замовлення']}")
 
-🛒 {data.get('Товар', '-')}
-📦 Кількість: {data.get('Кількість', '-') if data.get('Кількість') else '-'}
-💵 Ціна за од.: {data.get('Ціна за одиницю', '-') if data.get('Ціна за одиницю') else '-'}
-📑 Артикул: {data.get('Артикул', '-') if data.get('Артикул') else '-'}
-"""
+    if data.get("products"):
+        message_parts.append("🛒 Товари:")
+        for i, product in enumerate(data["products"], 1):
+            message_parts.append(f"{i}. {product['name']}")
+            message_parts.append(f"   📦 Кількість: {product['quantity']}")
+            message_parts.append(f"   💵 Сума: {product['total_price']}")
+
+            if product.get("article"):
+                message_parts.append(f"   📑 Артикул: {product['article']}")
+            if product.get("unit_price"):
+                message_parts.append(f"   🏷️ Ціна за од.: {product['unit_price']} грн")
+
+            message_parts.append("")
+    else:
+        message_parts.append("❌ Не вдалося отримати інформацію про товари")
+
+    return "\n".join(message_parts)
 
 
 def extract_order_id(subject: str) -> str:
@@ -217,16 +328,13 @@ def extract_order_id(subject: str) -> str:
         for part in parts:
             if part.startswith("#"):
                 return part[1:]
-        # Fallback: look for any numbers in subject
-        import re
-
         numbers = re.findall(r"\d+", subject)
         return numbers[0] if numbers else subject
-    except Exception:
+    except:
         return subject
 
 
-def fetch_last_messages(gmail_service, tracking_data, n=15):
+def fetch_last_messages(gmail_service, tracking_data_list, n=15):
     """Fetch last n messages and process new orders"""
     try:
         results = (
@@ -239,15 +347,14 @@ def fetch_last_messages(gmail_service, tracking_data, n=15):
 
         if not messages:
             print("No messages found.")
-            return tracking_data
+            return tracking_data_list
 
         new_orders_found = 0
 
         for msg in messages:
             msg_id = msg["id"]
 
-            # Skip if we've already seen this message
-            if msg_id in tracking_data["seen_ids"]:
+            if msg_id in tracking_data_list["seen_ids"]:
                 continue
 
             msg_data = (
@@ -261,14 +368,12 @@ def fetch_last_messages(gmail_service, tracking_data, n=15):
             sender = headers.get("From", "")
             subject = headers.get("Subject", "")
 
-            # Check if it's an Agropride order
             if "info@agropride.com.ua" in sender and "Нове замовлення" in subject:
                 order_id = extract_order_id(subject)
 
-                # Skip if order was already processed
-                if order_id in tracking_data["seen_orders"]:
+                if order_id in tracking_data_list["seen_orders"]:
                     print(f"⚠️ Order {order_id} already processed, skipping.")
-                    tracking_data["seen_ids"].add(msg_id)  # Mark message as seen
+                    tracking_data_list["seen_ids"].add(msg_id)  # Mark message as seen
                     continue
 
                 print(f"🆕 New order found: {order_id}")
@@ -279,46 +384,47 @@ def fetch_last_messages(gmail_service, tracking_data, n=15):
                     text = format_order_for_telegram(order_data, subject)
                     send_telegram_message(text)
 
-                    # Mark as processed
-                    tracking_data["seen_ids"].add(msg_id)
-                    tracking_data["seen_orders"].add(order_id)
+                    tracking_data_list["seen_ids"].add(msg_id)
+                    tracking_data_list["seen_orders"].add(order_id)
                     new_orders_found += 1
 
                     print(f"✅ Sent order {order_id} to Telegram")
+
+                    if DEBUG:
+                        print(
+                            f"📧 Products found: {len(order_data.get('products', []))}"
+                        )
+                        for product in order_data.get("products", []):
+                            print(f"   - {product['name']}")
                 else:
                     print(f"❌ Could not extract body for order {order_id}")
             else:
-                # Mark non-order messages as seen
-                tracking_data["seen_ids"].add(msg_id)
+                tracking_data_list["seen_ids"].add(msg_id)
 
         print(f"📊 Found {new_orders_found} new orders")
-        return tracking_data
+        return tracking_data_list
 
     except (HttpError, BrokenPipeError, ssl.SSLEOFError) as error:
         print(f"⚠️ Connection error: {error}")
         time.sleep(15)
-        return tracking_data
+        return tracking_data_list
 
 
 if __name__ == "__main__":
     if not os.path.exists(TRACKING_FILE):
         save_tracking_data({"seen_ids": set(), "seen_orders": set()})
 
-    try:
-        service = get_gmail_service()
-        tracking_data = load_tracking_data()
+    service = get_gmail_service()
+    tracking_data = load_tracking_data()
 
-        print(
-            f"📊 Previously seen: {len(tracking_data['seen_ids'])} messages, {len(tracking_data['seen_orders'])} orders"
-        )
-        print("🔍 Checking for new orders...")
+    print(
+        f"📊 Previously seen: {len(tracking_data['seen_ids'])} messages, {len(tracking_data['seen_orders'])} orders"
+    )
+    print("🔍 Checking for new orders...")
 
-        tracking_data = fetch_last_messages(service, tracking_data, n=5)
-        save_tracking_data(tracking_data)
+    tracking_data = fetch_last_messages(service, tracking_data, n=5)
+    save_tracking_data(tracking_data)
 
-        print(
-            f"✅ Done. Now tracking {len(tracking_data['seen_ids'])} messages and {len(tracking_data['seen_orders'])} orders"
-        )
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    print(
+        f"✅ Done. Now tracking {len(tracking_data['seen_ids'])} messages and {len(tracking_data['seen_orders'])} orders"
+    )
