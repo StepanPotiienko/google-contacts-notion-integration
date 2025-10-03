@@ -323,15 +323,12 @@ def format_order_for_telegram(data: dict, subject: str) -> str:
 
 def extract_order_id(subject: str) -> str:
     """Extract order ID from subject line"""
-    try:
-        parts = subject.split()
-        for part in parts:
-            if part.startswith("#"):
-                return part[1:]
-        numbers = re.findall(r"\d+", subject)
-        return numbers[0] if numbers else subject
-    except:
-        return subject
+    parts = subject.split()
+    for part in parts:
+        if part.startswith("#"):
+            return part[1:]
+    numbers = re.findall(r"\d+", subject)
+    return numbers[0] if numbers else subject
 
 
 def fetch_last_messages(gmail_service, tracking_data_list, n=15):
@@ -418,7 +415,8 @@ if __name__ == "__main__":
     tracking_data = load_tracking_data()
 
     print(
-        f"📊 Previously seen: {len(tracking_data['seen_ids'])} messages, {len(tracking_data['seen_orders'])} orders"
+        f"📊 Previously seen: {len(tracking_data['seen_ids'])} messages, \
+            {len(tracking_data['seen_orders'])} orders"
     )
     print("🔍 Checking for new orders...")
 
@@ -426,5 +424,6 @@ if __name__ == "__main__":
     save_tracking_data(tracking_data)
 
     print(
-        f"✅ Done. Now tracking {len(tracking_data['seen_ids'])} messages and {len(tracking_data['seen_orders'])} orders"
+        f"✅ Done. Now tracking {len(tracking_data['seen_ids'])} messages \
+            and {len(tracking_data['seen_orders'])} orders"
     )

@@ -1,7 +1,6 @@
 """Notion related stuff"""
 
 import os
-import time
 import dotenv
 from notion_client import Client
 
@@ -48,19 +47,24 @@ def debug_database_schema(database_id):
         print(f"- {name}: {prop['type']}")
 
 
-def page_exists_in_database(database_id: str, page_name: str) -> bool:
+def delete_duplicates_in_database(database_id: str, contacts_list: list) -> None:
     """
     Check whether a page with the given title already exists in the specified database.
     Returns True if found, otherwise False.
     """
-    response = NOTION_CLIENT.databases.query(
-        database_id=database_id,
-        filter={
-            "property": "Name",  # must match the title property in your DB
-            "title": {"equals": page_name},
-        },
-    )
-    return len(response.get("results", [])) > 0  # type: ignore
+
+    for contact in contacts_list:
+        response = NOTION_CLIENT.databases.query(
+            database_id=database_id,
+            filter={
+                "property": "Name",
+                "title": {"equals": contact},
+            },
+        )
+
+        if len(response.get("results", [])) > 0:  # type: ignore
+            contacts_list.remove(contact)
+            print("Removed:", contact)
 
 
 def find_missing_tasks(contacts_list: list):
@@ -78,16 +82,13 @@ def find_missing_tasks(contacts_list: list):
         title = title_prop[0]["plain_text"] if title_prop else "Untitled"
         existing_tasks.add(title)
 
+        print("Removing duplicates...")
+        delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)  # type: ignore
+
         for contact in contacts_list:
             contact_name = contact[0]
-
-            if page_exists_in_database(CRM_DATABASE_ID, contact_name):  # type: ignore
-                print(f"Task already exists for: {contact_name}")
-                time.sleep(10)
-                continue
-
             print(f"Creating new task for: {contact_name}")
-            crm_page = NOTION_CLIENT.pages.create(
+            NOTION_CLIENT.pages.create(
                 parent={"database_id": CRM_DATABASE_ID},
                 properties={
                     "Name": {"title": [{"text": {"content": contact_name}}]},
@@ -107,27 +108,3 @@ def find_missing_tasks(contacts_list: list):
                     },
                 },
             )
-
-            crm_page_id = crm_page["id"]  # type: ignore
-            print(crm_page_id)  # To bypass pylint warning lol
-
-            # TODO: Implement adding a task to Production database.
-            # print("Creating a page in Production Tasks database...")
-            # NOTION_CLIENT.pages.create(
-            #     parent={"database_id": PRODUCTION_DATABASE_ID},
-            #     properties={
-            #         "Name": {
-            #             "title": [
-            #                 {
-            #                     "text": {"content": contact_name}
-            #                 }
-            #             ]
-            #         },
-            #         "Status": {
-            #             "status": {"name": "Нова задача"}
-            #         },
-            #         "Relation": [{
-            #             "id": crm_page_id
-            #         }]
-            #     }
-            # )
