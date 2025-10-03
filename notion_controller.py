@@ -105,7 +105,7 @@ def find_missing_tasks(contacts_list: list):
                             {
                                 "text": {
                                     "content": (
-                                        contact[2] if contact[2] != "No phone" else None
+                                        contact[2] if contact[2] != "No phone" else ""
                                     )
                                 }
                             }
