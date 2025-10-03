@@ -65,6 +65,8 @@ def delete_duplicates_in_database(database_id: str | None, contacts_list: list) 
         if len(response.get("results", [])) > 0:  # type: ignore
             contacts_list.remove(contact)
             print("Removed:", contact[0])
+        else:
+            continue
 
     return contacts_list
 
@@ -80,6 +82,7 @@ def find_missing_tasks(contacts_list: list):
 
     print("Removing duplicates...")
     contacts_list = delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)
+    print("Removed duplicates.")
 
     for page in results["results"]:  # type: ignore
         props = page["properties"]
