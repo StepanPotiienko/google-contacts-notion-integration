@@ -78,14 +78,14 @@ def find_missing_tasks(contacts_list: list):
 
     debug_database_schema(database_id=CRM_DATABASE_ID)
 
+    print("Removing duplicates...")
+    contacts_list = delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)
+
     for page in results["results"]:  # type: ignore
         props = page["properties"]
         title_prop = props["Name"]["title"]
         title = title_prop[0]["plain_text"] if title_prop else "Untitled"
         existing_tasks.add(title)
-
-        print("Removing duplicates...")
-        contacts_list = delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)
 
         for contact in contacts_list:
             contact_name = contact[0]
