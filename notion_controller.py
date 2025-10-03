@@ -47,7 +47,7 @@ def debug_database_schema(database_id):
         print(f"- {name}: {prop['type']}")
 
 
-def delete_duplicates_in_database(database_id: str, contacts_list: list) -> None:
+def delete_duplicates_in_database(database_id: str | None, contacts_list: list) -> list:
     """
     Check whether a page with the given title already exists in the specified database.
     Returns True if found, otherwise False.
@@ -55,7 +55,7 @@ def delete_duplicates_in_database(database_id: str, contacts_list: list) -> None
 
     for contact in contacts_list:
         response = NOTION_CLIENT.databases.query(
-            database_id=database_id,
+            database_id=database_id,  # type: ignore
             filter={
                 "property": "Name",
                 "title": {"equals": contact[0]},
@@ -64,7 +64,9 @@ def delete_duplicates_in_database(database_id: str, contacts_list: list) -> None
 
         if len(response.get("results", [])) > 0:  # type: ignore
             contacts_list.remove(contact)
-            print("Removed:", contact)
+            print("Removed:", contact[0])
+
+    return contacts_list
 
 
 def find_missing_tasks(contacts_list: list):
@@ -83,7 +85,7 @@ def find_missing_tasks(contacts_list: list):
         existing_tasks.add(title)
 
         print("Removing duplicates...")
-        delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)  # type: ignore
+        contacts_list = delete_duplicates_in_database(CRM_DATABASE_ID, contacts_list)
 
         for contact in contacts_list:
             contact_name = contact[0]
