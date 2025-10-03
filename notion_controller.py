@@ -58,7 +58,7 @@ def delete_duplicates_in_database(database_id: str, contacts_list: list) -> None
             database_id=database_id,
             filter={
                 "property": "Name",
-                "title": {"equals": contact},
+                "title": {"equals": contact[0]},
             },
         )
 
