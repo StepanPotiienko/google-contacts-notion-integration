@@ -3,6 +3,7 @@
 import os
 import time
 import dotenv
+import httpx
 from notion_client import Client
 from notion_client.errors import RequestTimeoutError
 
@@ -12,162 +13,264 @@ NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 CRM_DATABASE_ID = os.getenv("CRM_DATABASE_ID")
 PRODUCTION_DATABASE_ID = os.getenv("PRODUCTION_DATABASE_ID")
 
-# Configure client with longer timeout and retry settings
-NOTION_CLIENT = Client(
-    auth=NOTION_API_KEY, timeout=30  # 30 seconds timeout instead of default
-)
 
+# Create a custom HTTP client with proper timeout configuration
+class NotionController:
+    """Do Notion and stuff you know"""
 
-def notion_request_with_retry(func, max_retries=3, delay=2):
-    """Wrapper function to retry Notion API calls with exponential backoff"""
-    for attempt in range(max_retries):
+    def __init__(self):
+        self.notion_client = self._create_client()
+
+    def _create_client(self):
+        """Create Notion client with proper timeout settings"""
+        http_client = httpx.Client(timeout=httpx.Timeout(30.0))
+
+        return Client(auth=NOTION_API_KEY, client=http_client)
+
+    def notion_request_with_retry(self, func, max_retries=3, initial_delay=2):
+        """Wrapper function to retry Notion API calls with exponential backoff"""
+        last_exception = None
+
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except (
+                RequestTimeoutError,
+                httpx.ReadTimeout,
+                httpx.ConnectTimeout,
+            ) as e:
+                last_exception = e
+                if attempt == max_retries - 1:
+                    break
+
+                delay = initial_delay * (2**attempt)  # Exponential backoff
+                print(
+                    f"Notion API request failed (attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+
+        print(f"All retries failed. Last error: {last_exception}")
+        raise last_exception  # type: ignore
+
+    def connect_to_notion_database(self):
+        """Connect to a notion database and return tasks list"""
+        tasks_list = []
+
+        print("Listing tasks from Notion database...")
+
+        def query_database():
+            return self.notion_client.databases.query(database_id=CRM_DATABASE_ID)  # type: ignore
+
         try:
-            return func()
-        except RequestTimeoutError as e:
-            if attempt == max_retries - 1:
-                raise e
-            print(
-                f"Notion API request failed (attempt {attempt + 1}/{max_retries}): {e}"
+            results = self.notion_request_with_retry(query_database)
+
+            for page in results["results"]:  # type: ignore
+                props = page["properties"]
+                title_prop = props["Name"]["title"]
+                title = title_prop[0]["plain_text"] if title_prop else "Untitled"
+                tasks_list.append(title)
+
+            print(f"Found {len(tasks_list)} tasks in database")
+            return tasks_list
+
+        except Exception as e:
+            print(f"Error connecting to Notion database: {e}")
+            return tasks_list
+
+    def get_title_property_name(self, database_id):
+        """Parse the name of the title property"""
+
+        def retrieve_database():
+            return self.notion_client.databases.retrieve(database_id=database_id)
+
+        try:
+            db = self.notion_request_with_retry(retrieve_database)
+            for prop_name, prop in db["properties"].items():  # type: ignore
+                if prop["type"] == "title":
+                    return prop_name
+            raise ValueError("No title property found in database")
+        except Exception as e:
+            print(f"Error getting title property: {e}")
+            raise
+
+    def debug_database_schema(self, database_id):
+        """Display properties of a database"""
+
+        def retrieve_database():
+            return self.notion_client.databases.retrieve(database_id=database_id)
+
+        try:
+            db = self.notion_request_with_retry(retrieve_database)
+            print("Database schema:")
+            for name, prop in db["properties"].items():  # type: ignore
+                print(f"- {name}: {prop['type']}")
+        except Exception as e:
+            print(f"Error debugging database schema: {e}")
+
+    def check_contact_exists(self, database_id, contact_name):
+        """Check if a contact already exists in the database"""
+
+        def query_contact():
+            return self.notion_client.databases.query(
+                database_id=database_id,
+                filter={
+                    "property": "Name",
+                    "title": {"equals": contact_name},
+                },
             )
-            time.sleep(delay * (2**attempt))
+
+        try:
+            response = self.notion_request_with_retry(query_contact)
+            return len(response.get("results", [])) > 0  # type: ignore
+        except Exception as e:
+            print(f"Error checking contact {contact_name}: {e}")
+            return False  # Assume it doesn't exist if we can't check
+
+    def delete_duplicates_in_database(self, database_id, contacts_list):
+        """Remove contacts that already exist in the database"""
+        print("Checking for duplicates...")
+        filtered_contacts = []
+        total_contacts = len(contacts_list)
+
+        for i, contact in enumerate(contacts_list):
+            contact_name = contact[0]
+            print(f"Checking {i+1}/{total_contacts}: {contact_name}")
+
+            if not self.check_contact_exists(database_id, contact_name):
+                filtered_contacts.append(contact)
+            else:
+                print(f"Removed duplicate: {contact_name}")
+
+            # Small delay to avoid rate limiting
+            time.sleep(0.1)
+
+        print(f"After deduplication: {len(filtered_contacts)} contacts remaining")
+        return filtered_contacts
+
+    def get_all_existing_tasks(self):
+        """Get all existing tasks from the database with pagination"""
+        all_results = []
+        start_cursor = None
+        has_more = True
+
+        print("Fetching all existing tasks...")
+
+        while has_more:
+
+            def query_page():
+                params = {"database_id": CRM_DATABASE_ID, "page_size": 100}
+                if start_cursor:
+                    params["start_cursor"] = start_cursor
+                return self.notion_client.databases.query(**params)
+
+            try:
+                response = self.notion_request_with_retry(query_page)
+                all_results.extend(response["results"])  # type: ignore
+                has_more = response.get("has_more", False)  # type: ignore
+                start_cursor = response.get("next_cursor")  # type: ignore
+
+                print(f"Fetched {len(response['results'])} tasks...")  # type: ignore
+
+            except Exception as e:
+                print(f"Error fetching page: {e}")
+                break
+
+        existing_tasks = set()
+        for page in all_results:
+            props = page["properties"]
+            title_prop = props["Name"]["title"]
+            title = title_prop[0]["plain_text"] if title_prop else "Untitled"
+            existing_tasks.add(title)
+
+        print(f"Total existing tasks: {len(existing_tasks)}")
+        return existing_tasks
+
+    def create_contact_page(self, contact):
+        """Create a new page for a contact"""
+        contact_name, email, phone = contact
+
+        def create_page():
+            properties = {"Name": {"title": [{"text": {"content": contact_name}}]}}
+
+            # Only add email if it's valid
+            if email and email != "No email":
+                properties["Email"] = {"email": email}
+
+            # Only add phone if it's valid
+            if phone and phone != "No phone":
+                properties["Phone"] = {"rich_text": [{"text": {"content": phone}}]}
+
+            return self.notion_client.pages.create(
+                parent={"database_id": CRM_DATABASE_ID},
+                properties=properties,
+            )
+
+        try:
+            self.notion_request_with_retry(create_page)
+            print(f"✓ Successfully created: {contact_name}")
+            return True
+        except Exception as e:
+            print(f"✗ Failed to create {contact_name}: {e}")
+            return False
+
+    def find_missing_tasks(self, contacts_list):
+        """Create pages for contacts that don't exist in the database"""
+        if not contacts_list:
+            print("No contacts to process")
+            return
+
+        print(f"Starting sync with {len(contacts_list)} contacts...")
+
+        try:
+            # Get all existing tasks
+            existing_tasks = self.get_all_existing_tasks()
+
+            # Find contacts that don't exist
+            new_contacts = [
+                contact for contact in contacts_list if contact[0] not in existing_tasks
+            ]
+
+            print(f"Found {len(new_contacts)} new contacts to create")
+
+            # Create new contacts
+            success_count = 0
+            for i, contact in enumerate(new_contacts):
+                contact_name = contact[0]
+                print(f"Creating {i+1}/{len(new_contacts)}: {contact_name}")
+
+                if self.create_contact_page(contact):
+                    success_count += 1
+
+                # Rate limiting - be nice to the API
+                time.sleep(0.5)
+
+            print(
+                f"Sync completed! Successfully created {success_count}/{len(new_contacts)} contacts"
+            )
+
+        except Exception as e:
+            print(f"Error in find_missing_tasks: {e}")
+
+
+notion_controller = NotionController()
 
 
 def connect_to_notion_database():
-    """Connect to a notion database and return tasks list (filtered by Status)."""
-    tasks_list: list = []
-
-    print("Listing tasks from Notion database...")
-
-    def query_database():
-        return NOTION_CLIENT.databases.query(database_id=CRM_DATABASE_ID)  # type: ignore
-
-    results = notion_request_with_retry(query_database)
-
-    for page in results["results"]:  # type: ignore
-        props = page["properties"]
-        title_prop = props["Name"]["title"]
-        title = title_prop[0]["plain_text"] if title_prop else "Untitled"
-        tasks_list.append(title)
-
-    return tasks_list
+    return notion_controller.connect_to_notion_database()
 
 
 def get_title_property_name(database_id):
-    """Parse the name of the property."""
-
-    def retrieve_database():
-        return NOTION_CLIENT.databases.retrieve(database_id=database_id)
-
-    db = notion_request_with_retry(retrieve_database)
-    for prop_name, prop in db["properties"].items():  # type: ignore
-        if prop["type"] == "title":
-            return prop_name
-    raise ValueError("No title property found in database")
+    return notion_controller.get_title_property_name(database_id)
 
 
 def debug_database_schema(database_id):
-    """Display properties of a database with the database_id."""
-
-    def retrieve_database():
-        return NOTION_CLIENT.databases.retrieve(database_id=database_id)
-
-    db = notion_request_with_retry(retrieve_database)
-    print("Database schema:")
-    for name, prop in db["properties"].items():  # type: ignore
-        print(f"- {name}: {prop['type']}")
+    notion_controller.debug_database_schema(database_id)
 
 
-def delete_duplicates_in_database(database_id: str | None, contacts_list: list) -> list:
-    """
-    Check whether a page with the given title already exists in the specified database.
-    Returns True if found, otherwise False.
-    """
-    for contact in contacts_list[
-        :
-    ]:  # Use slice copy to avoid modification during iteration
-
-        def query_contact():
-            return NOTION_CLIENT.databases.query(
-                database_id=database_id,  # type: ignore
-                filter={
-                    "property": "Name",
-                    "title": {"equals": contact[0]},
-                },
-            )
-
-        response = notion_request_with_retry(query_contact)
-
-        if len(response.get("results", [])) > 0:  # type: ignore
-            contacts_list.remove(contact)
-            print("Removed:", contact[0])
-
-    return contacts_list
+def delete_duplicates_in_database(database_id, contacts_list):
+    return notion_controller.delete_duplicates_in_database(database_id, contacts_list)
 
 
-def find_missing_tasks(contacts_list: list):
-    """Create a page for a new contact"""
-    print("Creating pages for the tasks...")
-
-    # Get all existing tasks in one go
-    def query_all_pages():
-        all_results = []
-        has_more = True
-        start_cursor = None
-
-        while has_more:
-            query_params = {"database_id": CRM_DATABASE_ID, "page_size": 100}
-            if start_cursor:
-                query_params["start_cursor"] = start_cursor
-
-            response = notion_request_with_retry(
-                lambda: NOTION_CLIENT.databases.query(**query_params)
-            )
-
-            all_results.extend(response["results"])  # type: ignore
-            has_more = response.get("has_more", False)  # type: ignore
-            start_cursor = response.get("next_cursor")  # type: ignore
-
-        return all_results
-
-    all_pages = notion_request_with_retry(query_all_pages)
-    existing_tasks = set()
-
-    for page in all_pages:  # type: ignore
-        props = page["properties"]
-        title_prop = props["Name"]["title"]
-        title = title_prop[0]["plain_text"] if title_prop else "Untitled"
-        existing_tasks.add(title)
-
-    new_contacts = [
-        contact for contact in contacts_list if contact[0] not in existing_tasks
-    ]
-
-    print(f"Found {len(new_contacts)} new contacts to create")
-
-    for contact in new_contacts:
-        contact_name = contact[0]
-        print(f"Creating new task for: {contact_name}")
-
-        def create_page():
-            return NOTION_CLIENT.pages.create(
-                parent={"database_id": CRM_DATABASE_ID},
-                properties={
-                    "Name": {"title": [{"text": {"content": contact_name}}]},
-                    "Email": {
-                        "email": contact[1] if contact[1] != "No email" else None
-                    },
-                    "Phone": {
-                        "rich_text": [
-                            {
-                                "text": {
-                                    "content": (
-                                        contact[2] if contact[2] != "No phone" else ""
-                                    )
-                                }
-                            }
-                        ]
-                    },
-                },
-            )
-
-        notion_request_with_retry(create_page)
+def find_missing_tasks(contacts_list):
+    notion_controller.find_missing_tasks(contacts_list)

@@ -1,6 +1,7 @@
 """Main logic of AgroprideOS"""
 
 import os
+import time
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -152,17 +153,24 @@ def get_contacts_list(person: dict):
 
 def main():
     """Run the script"""
-    creds = get_credentials()
-    service = build("people", "v1", credentials=creds)
+    try:
+        creds = get_credentials()
+        service = build("people", "v1", credentials=creds)
 
-    token = update_sync_token()
-    if token:
-        incremental_sync(service, token)
-    else:
-        full_sync(service)
+        token = update_sync_token()
+        if token:
+            incremental_sync(service, token)
+        else:
+            full_sync(service)
 
-    notion_controller.connect_to_notion_database()
-    notion_controller.find_missing_tasks(contacts_list)
+        time.sleep(2)
+
+        notion_controller.connect_to_notion_database()
+        notion_controller.find_missing_tasks(contacts_list)
+
+    except Exception as e:
+        print(f"Script failed with error: {e}")
+        raise
 
 
 if __name__ == "__main__":
