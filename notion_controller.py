@@ -94,14 +94,14 @@ class NotionController:
             print(f"Error getting title property: {e}")
             raise
 
+    def retrieve_database(self, database_id):
+        """Retrieve database data"""
+        return self.notion_client.databases.retrieve(database_id=database_id)
+
     def debug_database_schema(self, database_id):
         """Display properties of a database"""
-
-        def retrieve_database():
-            return self.notion_client.databases.retrieve(database_id=database_id)
-
         try:
-            db = self.notion_request_with_retry(retrieve_database)
+            db = self.notion_request_with_retry(self.retrieve_database(database_id))
             print("Database schema:")
             for name, prop in db["properties"].items():  # type: ignore
                 print(f"- {name}: {prop['type']}")
@@ -127,7 +127,121 @@ class NotionController:
             print(f"Error checking contact {contact_name}: {e}")
             return False  # Assume it doesn't exist if we can't check
 
-    def delete_duplicates_in_database(self, database_id, contacts_list):
+    def delete_duplicates(self, database_id: str):
+        """Delete duplicates in database based on Name property with batching to avoid 502 errors"""
+        print(f"Checking for duplicates in database: {database_id}")
+
+        try:
+            all_pages = []
+            start_cursor = None
+            has_more = True
+
+            print("Fetching all pages from database...")
+            while has_more:
+
+                def query_page():
+                    params = {"database_id": database_id, "page_size": 100}
+                    if start_cursor:
+                        params["start_cursor"] = start_cursor
+                    return self.notion_client.databases.query(**params)
+
+                response = self.notion_request_with_retry(query_page)
+                all_pages.extend(response["results"])  # type: ignore
+                has_more = response.get("has_more", False)  # type: ignore
+                start_cursor = response.get("next_cursor")  # type: ignore
+                print(f"Fetched {len(response['results'])} pages...")  # type: ignore
+
+            print(f"Total pages in database: {len(all_pages)}")
+
+            name_to_pages = {}
+
+            for page in all_pages:
+                props = page["properties"]
+                title_prop = props.get("Name", {}).get("title", [])
+                name = title_prop[0]["plain_text"] if title_prop else "Untitled"
+                page_id = page["id"]
+
+                if name not in name_to_pages:
+                    name_to_pages[name] = []
+
+                name_to_pages[name].append(
+                    {
+                        "page_id": page_id,
+                        "created_time": page.get("created_time", ""),
+                        "last_edited_time": page.get("last_edited_time", ""),
+                    }
+                )
+
+            duplicates = {
+                name: pages for name, pages in name_to_pages.items() if len(pages) > 1
+            }
+
+            if not duplicates:
+                print("No duplicates found!")
+                return
+
+            print(f"Found {len(duplicates)} duplicate entries:")
+            for name, pages in duplicates.items():
+                print(f"  '{name}': {len(pages)} instances")
+
+            total_to_delete = sum(len(pages) - 1 for pages in duplicates.values())
+            response = input(
+                f"\nDo you want to delete duplicates? This will remove {total_to_delete} pages. (y/N): "
+            )
+
+            if response.lower() != "y":
+                print("Deletion cancelled.")
+                return
+
+            all_pages_to_delete = []
+            for name, pages in duplicates.items():
+                pages.sort(key=lambda x: x["last_edited_time"], reverse=True)
+                all_pages_to_delete.extend(pages[1:])
+
+            print(
+                f"\nStarting deletion of {len(all_pages_to_delete)} pages in batches..."
+            )
+
+            batch_size = 5
+            deleted_count = 0
+            batch_count = 0
+
+            for i, page_info in enumerate(all_pages_to_delete):
+                try:
+
+                    def delete_page():
+                        return self.notion_client.pages.update(
+                            page_id=page_info["page_id"], archived=True
+                        )
+
+                    self.notion_request_with_retry(delete_page)
+                    deleted_count += 1
+                    print(
+                        f"Deleted {i+1}/{len(all_pages_to_delete)}: {page_info['page_id']}"
+                    )
+
+                    if (i + 1) % batch_size == 0:
+                        batch_count += 1
+                        print(
+                            f"\nBatch {batch_count} completed ({batch_size} pages).\
+                                Waiting 5 seconds before next batch..."
+                        )
+                        time.sleep(5)
+                    else:
+                        time.sleep(0.3)
+
+                except Exception as e:
+                    print(f"Failed to delete page {page_info['page_id']}: {e}")
+
+            print(
+                f"\nDeletion completed! Successfully removed \
+                    {deleted_count}/{len(all_pages_to_delete)} duplicate pages."
+            )
+
+        except Exception as e:
+            print(f"Error in delete_duplicates: {e}")
+
+    def delete_duplicate_contacts_in_database(self, database_id, contacts_list):
         """Remove contacts that already exist in the database"""
         print("Checking for duplicates...")
         filtered_contacts = []
@@ -269,8 +383,18 @@ def debug_database_schema(database_id):
 
 
 def delete_duplicates_in_database(database_id, contacts_list):
-    return notion_controller.delete_duplicates_in_database(database_id, contacts_list)
+    return notion_controller.delete_duplicate_contacts_in_database(
+        database_id, contacts_list
+    )
 
 
 def find_missing_tasks(contacts_list):
     notion_controller.find_missing_tasks(contacts_list)
+
+
+def delete_duplicates():
+    database_id = str(input("Enter database id: "))
+    notion_controller.delete_duplicates(database_id=database_id)
+
+
+delete_duplicates()
