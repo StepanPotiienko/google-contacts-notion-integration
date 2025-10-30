@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import time
 from collections import defaultdict
 
 from dotenv import load_dotenv
@@ -122,6 +123,17 @@ def find_duplicate_pages(pages):
     for page in pages:
         content_hash = get_page_content_hash(page)
         page_title = get_page_title(page)
+        # Add retry logic if needed
+        retries = 3
+        while retries > 0:
+            try:
+                page_title = get_page_title(page)
+                break
+            except Exception as e:
+                retries -= 1
+                if retries == 0:
+                    raise e
+            time.sleep(1)
         hash_groups[content_hash].append(
             {
                 "id": page["id"],
