@@ -53,7 +53,7 @@ class NotionController:
         print(f"All retries failed. Last error: {last_exception}")
         raise last_exception  # type: ignore
 
-    def connect_to_notion_database(self):
+    def connect_to_notion_database_and_return_tasks_list(self):
         """Connect to a notion database and return tasks list"""
         tasks_list = []
 
@@ -127,7 +127,7 @@ class NotionController:
             print(f"Error checking contact {contact_name}: {e}")
             return False  # Assume it doesn't exist if we can't check
 
-    def delete_duplicates(self, database_id: str):
+    def delete_name_duplicates(self, database_id: str):
         """Delete duplicates in database based on Name property with batching to avoid 502 errors"""
         print(f"Checking for duplicates in database: {database_id}")
 
@@ -183,15 +183,6 @@ class NotionController:
             print(f"Found {len(duplicates)} duplicate entries:")
             for name, pages in duplicates.items():
                 print(f"  '{name}': {len(pages)} instances")
-
-            total_to_delete = sum(len(pages) - 1 for pages in duplicates.values())
-            response = input(
-                f"\nDo you want to delete duplicates? This will remove {total_to_delete} pages. (y/N): "
-            )
-
-            if response.lower() != "y":
-                print("Deletion cancelled.")
-                return
 
             all_pages_to_delete = []
             for name, pages in duplicates.items():
@@ -371,7 +362,7 @@ notion_controller = NotionController()
 
 
 def connect_to_notion_database():
-    return notion_controller.connect_to_notion_database()
+    return notion_controller.connect_to_notion_database_and_return_tasks_list()
 
 
 def get_title_property_name(database_id):
@@ -394,7 +385,7 @@ def find_missing_tasks(contacts_list):
 
 def delete_duplicates():
     database_id = str(input("Enter database id: "))
-    notion_controller.delete_duplicates(database_id=database_id)
+    notion_controller.delete_name_duplicates(database_id=database_id)
 
 
 delete_duplicates()
