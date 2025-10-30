@@ -1,5 +1,5 @@
 anyio==4.10.0
-astroid==4.0.1
+astroid==3.3.11
 beautifulsoup4==4.14.0
 bs4==0.0.2
 cachetools==5.5.2
