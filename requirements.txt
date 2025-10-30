@@ -1,5 +1,5 @@
 anyio==4.10.0
-astroid==3.3.11
+astroid==4.0.1
 beautifulsoup4==4.14.0
 bs4==0.0.2
 cachetools==5.5.2
@@ -19,7 +19,7 @@ httpcore==1.0.9
 httplib2==0.22.0
 httpx==0.28.1
 idna==3.10
-isort<7
+isort==7.0.0
 mccabe==0.7.0
 notion-client==2.4.0
 oauthlib==3.3.1
