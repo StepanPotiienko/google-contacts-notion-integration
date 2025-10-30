@@ -1,7 +1,0 @@
-*.json
-/venv
-sync_token.txt
-*.env
-.idea/
-__pycache__/
-*.csv
