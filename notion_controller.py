@@ -127,6 +127,47 @@ class NotionController:
             print(f"Error checking contact {contact_name}: {e}")
             return False  # Assume it doesn't exist if we can't check
 
+    def entry_exists_in_database(
+        self, database_id, property_name, value, property_type="title"
+    ):
+        """Generic check if an entry with a given property value exists in a database.
+
+        property_type can be: "title", "rich_text", "email", "phone_number",
+        "select", "checkbox", "number".
+        Returns True if at least one matching page is found, False otherwise.
+        """
+        try:
+            if property_type == "checkbox":
+                # Normalize checkbox value to boolean
+                if isinstance(value, str):
+                    val_bool = value.lower() in ("true", "1", "yes")
+                else:
+                    val_bool = bool(value)
+                filter_obj = {
+                    "property": property_name,
+                    "checkbox": {"equals": val_bool},
+                }
+            elif property_type == "number":
+                filter_obj = {"property": property_name, "number": {"equals": value}}
+            else:
+                # title, rich_text, email, phone_number, select
+                filter_obj = {
+                    "property": property_name,
+                    property_type: {"equals": value},
+                }
+
+            def query():
+                return self.notion_client.databases.query(
+                    database_id=database_id, filter=filter_obj, page_size=1
+                )
+
+            response = self.notion_request_with_retry(query)
+            return len(response.get("results", [])) > 0  # type: ignore
+
+        except Exception as e:
+            print(f"Error checking entry in database: {e}")
+            return False
+
     def delete_name_duplicates(self, database_id: str):
         """Delete duplicates in database based on Name property with batching to avoid 502 errors"""
         print(f"Checking for duplicates in database: {database_id}")
@@ -386,6 +427,3 @@ def find_missing_tasks(contacts_list):
 def delete_duplicates():
     database_id = str(input("Enter database id: "))
     notion_controller.delete_name_duplicates(database_id=database_id)
-
-
-delete_duplicates()
