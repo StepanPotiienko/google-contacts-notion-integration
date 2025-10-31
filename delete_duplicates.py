@@ -29,8 +29,13 @@ def get_database_pages(notion, database_id):
 
         print(f"Fetched {len(pages)} pages so far...")
 
-        if not response.get("has_more"):
+        if len(pages) >= 8000:
+            print("Reached 8000 pages limit, stopping fetch to avoid excessive load.")
             break
+
+        # If needed
+        # if not response.get("has_more"):
+        # break
 
         # Seeing if this works
         # cursor = response.get("next_cursor")
