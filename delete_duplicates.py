@@ -27,9 +27,13 @@ def get_database_pages(notion, database_id):
         )
         pages.extend(response.get("results", []))
 
+        print(f"Fetched {len(pages)} pages so far...")
+
         if not response.get("has_more"):
             break
-        cursor = response.get("next_cursor")
+
+        # Seeing if this works
+        # cursor = response.get("next_cursor")
 
     return pages
 
@@ -123,7 +127,7 @@ def find_duplicate_pages(pages):
     for page in pages:
         content_hash = get_page_content_hash(page)
         page_title = get_page_title(page)
-        # Add retry logic if needed
+
         retries = 3
         while retries > 0:
             try:
