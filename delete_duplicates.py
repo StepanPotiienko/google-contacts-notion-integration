@@ -19,26 +19,24 @@ def get_database_pages(notion, database_id):
     pages = []
     cursor = None
 
+    batch_size: int = 2000
+
     while True:
-        response = notion.databases.query(
-            database_id=database_id,
-            start_cursor=cursor,
-            page_size=100,
-        )
+        response = notion.databases.query(database_id=database_id, start_cursor=cursor, page_size=0)
         pages.extend(response.get("results", []))
 
         print(f"Fetched {len(pages)} pages so far...")
 
-        if len(pages) >= 8000:
-            print("Reached 8000 pages limit, stopping fetch to avoid excessive load.")
+        if len(pages) >= batch_size:
+            print(
+                f"Reached {batch_size} pages limit, stopping fetch to avoid excessive load."
+            )
             break
 
-        # If needed
-        # if not response.get("has_more"):
-        # break
+        if not response.get("has_more"):
+            break
 
-        # Seeing if this works
-        # cursor = response.get("next_cursor")
+        cursor = response.get("next_cursor")
 
     return pages
 
@@ -161,11 +159,20 @@ def find_duplicate_pages(pages):
 def get_page_title(page):
     """Extract page title from properties"""
     properties = page.get("properties", {})
-    for prop_value in properties.items():
-        if prop_value.get("type") == "title" and prop_value.get("title"):
-            return "".join([t["plain_text"] for t in prop_value["title"]])
-    return "Untitled"
 
+    # Check if 'Name' property exists and has content
+    if 'Name' in properties:
+        name_prop = properties['Name']
+        if name_prop.get('type') == 'title' and name_prop.get('title'):
+            if name_prop['title']:  # Check if title array is not empty
+                return name_prop['title'][0].get('plain_text', '')
+
+    for prop_name, prop_value in properties.items():
+        if prop_value.get('type') == 'title' and prop_value.get('title'):
+            if prop_value['title']:
+                return prop_value['title'][0].get('plain_text', '')
+
+    return "Untitled"
 
 def delete_page(notion, page_id):
     """Archive a Notion page"""
@@ -183,12 +190,7 @@ def main():
     notion = Client(auth=NOTION_TOKEN)
 
     print("Fetching database pages...")
-    try:
-        pages = get_database_pages(notion, DATABASE_ID)
-    except Exception as e:
-        print(f"Error fetching pages: {e}")
-        print("Make sure your Notion integration has access to the database")
-        return
+    pages = get_database_pages(notion, DATABASE_ID)
 
     print(f"Found {len(pages)} total pages")
 
