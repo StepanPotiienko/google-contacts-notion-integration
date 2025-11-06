@@ -1,6 +1,7 @@
 """Delete duplicates in Notion database"""
 
 import hashlib
+import itertools
 import os
 import time
 from collections import defaultdict
@@ -13,32 +14,40 @@ load_dotenv()
 NOTION_TOKEN = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("CRM_DATABASE_ID")
 
+def print_first_n_entries_of_a_dict(n: int, iterable) -> list:
+    return list(itertools.islice(iterable, n))
 
-def get_database_pages(notion, database_id):
-    """Retrieve all pages from a Notion database"""
-    pages = []
-    cursor = None
+def return_database_chunk(notion, database_id: str) -> dict:
+    data = notion.databases.query(database_id)
+    database_object = data['object']
+    has_more = data['has_more']
+    next_cursor = data['next_cursor']
 
-    batch_size: int = 2000
+    buffer_size = 300
+    buffer = []
 
-    while True:
-        response = notion.databases.query(database_id=database_id, start_cursor=cursor, page_size=0)
-        pages.extend(response.get("results", []))
+    while has_more:
+        data_while = notion.databases.query(database_id, start_cursor=next_cursor)
 
-        print(f"Fetched {len(pages)} pages so far...")
+        for row in data_while['results']:
+            data['results'].append(row)
 
-        if len(pages) >= batch_size:
-            print(
-                f"Reached {batch_size} pages limit, stopping fetch to avoid excessive load."
-            )
+        has_more = data_while['has_more']
+        next_cursor = data_while['next_cursor']
+
+        print(f"Fetched {len(data['results'])} pages so far...")
+        buffer.extend(data['results'])
+
+        if len(buffer) > buffer_size:
+            print(f"Buffer is full. Returning {buffer_size} pages... ")
             break
 
-        if not response.get("has_more"):
-            break
-
-        cursor = response.get("next_cursor")
-
-    return pages
+    return {
+        "object": database_object,
+        "results": data["results"],
+        "next_cursor": next_cursor,
+        "has_more": has_more
+    }
 
 
 def get_page_content_hash(page):
@@ -46,7 +55,11 @@ def get_page_content_hash(page):
     Create a hash of the page's content by serializing all properties.
     This helps identify duplicates by comparing the entire content.
     """
-    properties = page.get("properties", {})
+
+    # TODO: #properties = page.get("title").get("text").get("content")
+    # TODO: AttributeError: 'NoneType' object has no attribute  'get'
+
+    properties = page.get("title").get("text").get("content")
 
     content_parts = []
 
@@ -189,26 +202,33 @@ def main():
 
     notion = Client(auth=NOTION_TOKEN)
 
-    print("Fetching database pages...")
-    pages = get_database_pages(notion, DATABASE_ID)
+    print("Fetching database result...")
+    result = return_database_chunk(notion, DATABASE_ID).get("results", [])
 
-    print(f"Found {len(pages)} total pages")
+    # LOGIC
+    # Work with a slice from the database
+    # Archive duplicates
+    # Move on to the next chunk
 
-    if len(pages) == 0:
-        print("No pages found in the database")
+    print(f"Found {len(result)} total result")
+
+    print(print_first_n_entries_of_a_dict(15, result))
+
+    if len(result) == 0:
+        print("No pages found in the list. Stopping...")
         return
 
-    print("Analyzing page content for duplicates...")
-    duplicates = find_duplicate_pages(pages)
+    print("Searching for duplicates...")
+    duplicates = find_duplicate_pages(result)
 
     if not duplicates:
-        print("No duplicate pages found!")
+        print("No duplicate result found!")
         return
 
     total_duplicates = sum(len(pages) - 1 for pages in duplicates.values())
     print(
         f"\nFound {len(duplicates)} groups of duplicates ({total_duplicates} \
-          total duplicate pages to delete)"
+          total duplicate result to delete)"
     )
 
     print("\nDuplicate groups found:")
@@ -219,8 +239,8 @@ def main():
                 f"  - {page['title']} (ID: {page['id']}, Created: {page['created_time'][:10]})"
             )
 
-    print(f"\nTotal pages that will be kept: {len(duplicates)}")
-    print(f"Total pages that will be deleted: {total_duplicates}")
+    print(f"\nTotal result that will be kept: {len(duplicates)}")
+    print(f"Total result that will be deleted: {total_duplicates}")
 
     print("\nDeleting duplicates...")
     deleted_count = 0
@@ -237,7 +257,7 @@ def main():
             except Exception as e:
                 print(f"Error deleting page {page['id']}: {e}")
 
-    print(f"\nSuccessfully deleted {deleted_count} duplicate pages")
+    print(f"\nSuccessfully deleted {deleted_count} duplicate result")
     print("Note: Pages are archived and can be restored from Notion's trash if needed")
 
 
