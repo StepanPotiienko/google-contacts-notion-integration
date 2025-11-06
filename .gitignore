@@ -1,7 +1,12 @@
 *.env
 *.pyc
 __pycache__/
+.idea/
+
 *.json
+.DS_Store
 sync_token.txt
 clients.csv
+
 venv/
+
