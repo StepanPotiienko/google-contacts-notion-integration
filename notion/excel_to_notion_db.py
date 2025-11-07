@@ -2,12 +2,13 @@
 
 import argparse
 
-import notion_controller
-import dotenv
-import os
-
 # TODO: Do I really want to convert Excel to CSV every time I need to add new clients?
 import csv
+import os
+
+import dotenv
+
+import notion.notion_controller as notion_controller
 
 dotenv.load_dotenv()
 

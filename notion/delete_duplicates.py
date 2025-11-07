@@ -14,29 +14,35 @@ load_dotenv()
 NOTION_TOKEN = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("CRM_DATABASE_ID")
 
+
 def print_first_n_entries_of_a_dict(n: int, iterable) -> list:
+    """Print first n entries of a dict for debugging purposes"""
     return list(itertools.islice(iterable, n))
 
-def return_database_chunk(notion, database_id: str) -> dict:
-    data = notion.databases.query(database_id)
-    database_object = data['object']
-    has_more = data['has_more']
-    next_cursor = data['next_cursor']
 
-    buffer_size = 300
+def return_database_chunk(notion, database_id: str, buffer_size: int) -> dict:
+    """Fetch a chunk of the Notion database of size buffer_size and return it"""
+    data = notion.databases.query(database_id)
+    database_object = data["object"]
+    has_more = data["has_more"]
+    next_cursor = data["next_cursor"]
+
     buffer = []
 
     while has_more:
         data_while = notion.databases.query(database_id, start_cursor=next_cursor)
 
-        for row in data_while['results']:
-            data['results'].append(row)
+        for row in data_while["results"]:
+            data["results"].append(row)
 
-        has_more = data_while['has_more']
-        next_cursor = data_while['next_cursor']
+        has_more = data_while["has_more"]
+        next_cursor = data_while["next_cursor"]
 
         print(f"Fetched {len(data['results'])} pages so far...")
-        buffer.extend(data['results'])
+        buffer.extend(data["results"])
+
+        # Rate limiting
+        time.sleep(0.5)
 
         if len(buffer) > buffer_size:
             print(f"Buffer is full. Returning {buffer_size} pages... ")
@@ -46,7 +52,7 @@ def return_database_chunk(notion, database_id: str) -> dict:
         "object": database_object,
         "results": data["results"],
         "next_cursor": next_cursor,
-        "has_more": has_more
+        "has_more": has_more,
     }
 
 
@@ -59,7 +65,8 @@ def get_page_content_hash(page):
     # TODO: #properties = page.get("title").get("text").get("content")
     # TODO: AttributeError: 'NoneType' object has no attribute  'get'
 
-    properties = page.get("title").get("text").get("content")
+    # By now we assume 'properties' is a dictionary of all page properties exists
+    properties = page["properties"]
 
     content_parts = []
 
@@ -143,17 +150,17 @@ def find_duplicate_pages(pages):
     for page in pages:
         content_hash = get_page_content_hash(page)
         page_title = get_page_title(page)
-
         retries = 3
         while retries > 0:
             try:
                 page_title = get_page_title(page)
                 break
-            except Exception as e:
+            except (KeyError, AttributeError):
                 retries -= 1
                 if retries == 0:
-                    raise e
+                    return
             time.sleep(1)
+
         hash_groups[content_hash].append(
             {
                 "id": page["id"],
@@ -174,18 +181,19 @@ def get_page_title(page):
     properties = page.get("properties", {})
 
     # Check if 'Name' property exists and has content
-    if 'Name' in properties:
-        name_prop = properties['Name']
-        if name_prop.get('type') == 'title' and name_prop.get('title'):
-            if name_prop['title']:  # Check if title array is not empty
-                return name_prop['title'][0].get('plain_text', '')
+    if "Name" in properties:
+        name_prop = properties["Name"]
+        if name_prop.get("type") == "title" and name_prop.get("title"):
+            if name_prop["title"]:  # Check if title array is not empty
+                return name_prop["title"][0].get("plain_text", "")
 
-    for prop_name, prop_value in properties.items():
-        if prop_value.get('type') == 'title' and prop_value.get('title'):
-            if prop_value['title']:
-                return prop_value['title'][0].get('plain_text', '')
+    for _, prop_value in properties.items():
+        if prop_value.get("type") == "title" and prop_value.get("title"):
+            if prop_value["title"]:
+                return prop_value["title"][0].get("plain_text", "")
 
     return "Untitled"
+
 
 def delete_page(notion, page_id):
     """Archive a Notion page"""
@@ -203,7 +211,9 @@ def main():
     notion = Client(auth=NOTION_TOKEN)
 
     print("Fetching database result...")
-    result = return_database_chunk(notion, DATABASE_ID).get("results", [])
+    result = return_database_chunk(notion, DATABASE_ID, buffer_size=50_000).get(
+        "results", []
+    )
 
     # LOGIC
     # Work with a slice from the database
@@ -211,8 +221,6 @@ def main():
     # Move on to the next chunk
 
     print(f"Found {len(result)} total result")
-
-    print(print_first_n_entries_of_a_dict(15, result))
 
     if len(result) == 0:
         print("No pages found in the list. Stopping...")
@@ -232,7 +240,7 @@ def main():
     )
 
     print("\nDuplicate groups found:")
-    for i, (hash_val, duplicate_pages) in enumerate(duplicates.items(), 1):
+    for i, (_, duplicate_pages) in enumerate(duplicates.items(), 1):
         print(f"\nGroup {i} ({len(duplicate_pages)} duplicates):")
         for page in duplicate_pages:
             print(
@@ -245,17 +253,14 @@ def main():
     print("\nDeleting duplicates...")
     deleted_count = 0
 
-    for hash_val, duplicate_pages in duplicates.items():
+    for _, duplicate_pages in duplicates.items():
         duplicate_pages.sort(key=lambda x: x["created_time"])
         pages_to_delete = duplicate_pages[1:]
 
         for page in pages_to_delete:
-            try:
-                delete_page(notion, page["id"])
-                deleted_count += 1
-                print(f"Deleted: {page['title']} (ID: {page['id']})")
-            except Exception as e:
-                print(f"Error deleting page {page['id']}: {e}")
+            delete_page(notion, page["id"])
+            deleted_count += 1
+            print(f"Deleted: {page['title']} (ID: {page['id']})")
 
     print(f"\nSuccessfully deleted {deleted_count} duplicate result")
     print("Note: Pages are archived and can be restored from Notion's trash if needed")
