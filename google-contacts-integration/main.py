@@ -8,7 +8,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-import notion_controller
+import notion.notion_controller as notion_controller
 
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
@@ -165,6 +165,10 @@ def main():
 
         time.sleep(2)
 
+        notion_controller.delete_duplicates_in_database(
+            database_id=os.environ["CRM_DATABASE_ID"],
+            contacts_list=contacts_list,
+        )
         notion_controller.connect_to_notion_database()
         notion_controller.find_missing_tasks(contacts_list)
 
