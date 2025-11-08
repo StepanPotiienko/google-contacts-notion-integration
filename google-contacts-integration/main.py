@@ -45,7 +45,7 @@ def update_sync_token(token: str | None = None) -> str | None:
         if not token or not isinstance(token, str):
             print(f"Warning: Invalid sync token received: {token}")
             return None
-        
+
         try:
             with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
                 f.write(token)
