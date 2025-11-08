@@ -276,11 +276,6 @@ def main():
         "results", []
     )
 
-    # LOGIC
-    # Work with a slice from the database
-    # Archive duplicates
-    # Move on to the next chunk
-
     print(f"Found {len(result)} total result")
 
     if len(result) == 0:
