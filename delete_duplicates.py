@@ -19,7 +19,7 @@ def get_database_pages(notion, database_id):
     pages = []
     cursor = None
 
-    batch_size: int = 2000
+    batch_size: int = 5_000
 
     while True:
         response = notion.databases.query(database_id=database_id, start_cursor=cursor, page_size=0)
