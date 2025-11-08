@@ -16,7 +16,8 @@ jobs:
       - name: Retreat sync_token.txt
         uses: actions/cache@v4
         with:
-          path: sync_token.txt
+          # Cache the sync token inside the integration directory
+          path: google-contacts-integration/sync_token.txt
           key: sync-token-cache
           restore-keys: |
             sync-token-cache
@@ -26,13 +27,22 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r ../requirements.txt
+          pip install -r requirements.txt
 
       - name: Run script
-        run: python ../main.py
+        working-directory: google-contacts-integration
+        run: python main.py
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
