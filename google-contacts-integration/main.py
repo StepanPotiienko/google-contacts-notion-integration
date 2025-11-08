@@ -41,13 +41,29 @@ def get_credentials():
 def update_sync_token(token: str | None = None) -> str | None:
     """Save sync token to file or retrieve existing one."""
     if token is not None:
-        with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
-            f.write(token)
+        # Validate token before saving
+        if not token or not isinstance(token, str):
+            print(f"Warning: Invalid sync token received: {token}")
+            return None
+        
+        try:
+            with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
+                f.write(token)
+            print(f"Sync token saved successfully")
+        except IOError as e:
+            print(f"Error saving sync token: {e}")
         return None
 
     if os.path.exists(SYNC_TOKEN_FILE):
-        with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
-            return f.read().strip()
+        try:
+            with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
+                token = f.read().strip()
+                if token:
+                    print(f"Using existing sync token")
+                    return token
+                print("Sync token file is empty")
+        except IOError as e:
+            print(f"Error reading sync token: {e}")
 
     return None
 
@@ -82,6 +98,7 @@ def incremental_sync(service, token: str):
         results = _fetch_connections(service, sync_token=token)
 
         if "connections" in results:
+            print(f"Found {len(results['connections'])} changed contacts")
             for person in results["connections"]:
                 handle_person(person)
 
@@ -96,13 +113,18 @@ def incremental_sync(service, token: str):
                     handle_person(person)
 
         new_token = results.get("nextSyncToken")
-        if new_token:
+        if new_token and new_token != token:
             update_sync_token(new_token)
             print("Incremental sync complete. Token updated.")
+        else:
+            print("Incremental sync complete. No token update needed.")
 
     except HttpError as e:
         if e.resp.status in (400, 410):  # invalid/expired sync token
             print("Sync token expired or invalid. Running full sync...")
+            # Delete the old token file
+            if os.path.exists(SYNC_TOKEN_FILE):
+                os.remove(SYNC_TOKEN_FILE)
             full_sync(service)
         else:
             raise

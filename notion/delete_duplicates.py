@@ -143,37 +143,98 @@ def extract_property_value(prop, prop_type):
         return f"unsupported_{prop_type}"
 
 
+def get_phone_number(page):
+    """Extract phone number from page properties"""
+    properties = page.get("properties", {})
+    
+    # Try common phone property names
+    phone_props = ["Phone", "phone", "Phone Number", "PhoneNumber", "Телефон"]
+    
+    for prop_name in phone_props:
+        if prop_name in properties:
+            prop = properties[prop_name]
+            prop_type = prop.get("type")
+            
+            if prop_type == "phone_number":
+                return prop.get("phone_number", "")
+            elif prop_type == "rich_text":
+                texts = prop.get("rich_text", [])
+                if texts:
+                    return texts[0].get("plain_text", "")
+    
+    return ""
+
+
+def normalize_phone(phone):
+    """Normalize phone number by removing spaces, dashes, parentheses, etc."""
+    if not phone:
+        return ""
+    # Remove all non-digit characters except +
+    normalized = "".join(c for c in phone if c.isdigit() or c == "+")
+    return normalized
+
+
 def find_duplicate_pages(pages):
-    """Find duplicate pages by comparing content hashes"""
+    """Find duplicate pages by comparing phone numbers and content hashes"""
+    phone_groups = defaultdict(list)
     hash_groups = defaultdict(list)
 
     for page in pages:
-        content_hash = get_page_content_hash(page)
         page_title = get_page_title(page)
-        retries = 3
-        while retries > 0:
-            try:
-                page_title = get_page_title(page)
-                break
-            except (KeyError, AttributeError):
-                retries -= 1
-                if retries == 0:
-                    return
-            time.sleep(1)
+        phone = get_phone_number(page)
+        normalized_phone = normalize_phone(phone)
+        
+        page_info = {
+            "id": page["id"],
+            "title": page_title,
+            "phone": phone,
+            "created_time": page["created_time"],
+            "last_edited_time": page["last_edited_time"],
+        }
+        
+        # Group by phone number (if exists and not empty)
+        if normalized_phone:
+            phone_groups[normalized_phone].append(page_info)
+        
+        # Also group by content hash as fallback
+        try:
+            content_hash = get_page_content_hash(page)
+            hash_groups[content_hash].append(page_info)
+        except (KeyError, AttributeError) as e:
+            print(f"Warning: Could not hash page {page_title}: {e}")
+            continue
 
-        hash_groups[content_hash].append(
-            {
-                "id": page["id"],
-                "title": page_title,
-                "created_time": page["created_time"],
-                "last_edited_time": page["last_edited_time"],
-            }
-        )
-
-    duplicates = {
+    # Find duplicates by phone number (primary method)
+    phone_duplicates = {
+        phone: pages for phone, pages in phone_groups.items() if len(pages) > 1
+    }
+    
+    # Find duplicates by content hash (secondary method)
+    hash_duplicates = {
         hash_val: pages for hash_val, pages in hash_groups.items() if len(pages) > 1
     }
-    return duplicates
+    
+    # Merge both duplicate detection methods
+    all_duplicates = {}
+    
+    # Add phone-based duplicates
+    for phone, pages in phone_duplicates.items():
+        all_duplicates[f"phone:{phone}"] = pages
+    
+    # Add hash-based duplicates (only if not already in phone duplicates)
+    for hash_val, pages in hash_duplicates.items():
+        page_ids = {p["id"] for p in pages}
+        # Check if these pages are already marked as duplicates by phone
+        already_found = False
+        for dup_pages in phone_duplicates.values():
+            if any(p["id"] in page_ids for p in dup_pages):
+                already_found = True
+                break
+        
+        if not already_found:
+            all_duplicates[f"hash:{hash_val}"] = pages
+    
+    return all_duplicates
 
 
 def get_page_title(page):
@@ -236,33 +297,47 @@ def main():
     total_duplicates = sum(len(pages) - 1 for pages in duplicates.values())
     print(
         f"\nFound {len(duplicates)} groups of duplicates ({total_duplicates} \
-          total duplicate result to delete)"
+          total duplicate pages to delete)"
     )
 
     print("\nDuplicate groups found:")
-    for i, (_, duplicate_pages) in enumerate(duplicates.items(), 1):
-        print(f"\nGroup {i} ({len(duplicate_pages)} duplicates):")
+    for i, (key, duplicate_pages) in enumerate(duplicates.items(), 1):
+        dup_type = "Phone" if key.startswith("phone:") else "Content"
+        identifier = key.split(":", 1)[1][:20] if ":" in key else key[:20]
+        print(f"\nGroup {i} - {dup_type} match ({identifier}...) - {len(duplicate_pages)} duplicates:")
         for page in duplicate_pages:
+            phone_info = f" | Phone: {page.get('phone', 'N/A')}" if page.get('phone') else ""
             print(
-                f"  - {page['title']} (ID: {page['id']}, Created: {page['created_time'][:10]})"
+                f"  - {page['title']}{phone_info} (Created: {page['created_time'][:10]})"
             )
 
-    print(f"\nTotal result that will be kept: {len(duplicates)}")
-    print(f"Total result that will be deleted: {total_duplicates}")
+    print(f"\nTotal pages that will be kept: {len(duplicates)}")
+    print(f"Total pages that will be deleted: {total_duplicates}")
+    
+    # Ask for confirmation before deleting
+    confirm = input("\nDo you want to proceed with deletion? (yes/no): ").strip().lower()
+    if confirm not in ['yes', 'y']:
+        print("Deletion cancelled.")
+        return
 
     print("\nDeleting duplicates...")
     deleted_count = 0
 
-    for _, duplicate_pages in duplicates.items():
+    for key, duplicate_pages in duplicates.items():
+        # Sort by created time - keep the oldest one (first created)
         duplicate_pages.sort(key=lambda x: x["created_time"])
         pages_to_delete = duplicate_pages[1:]
 
         for page in pages_to_delete:
-            delete_page(notion, page["id"])
-            deleted_count += 1
-            print(f"Deleted: {page['title']} (ID: {page['id']})")
+            try:
+                delete_page(notion, page["id"])
+                deleted_count += 1
+                print(f"Deleted: {page['title']} (Created: {page['created_time'][:10]})")
+                time.sleep(0.3)  # Rate limiting
+            except Exception as e:
+                print(f"Failed to delete {page['title']} ({page['id']}): {e}")
 
-    print(f"\nSuccessfully deleted {deleted_count} duplicate result")
+    print(f"\nSuccessfully deleted {deleted_count} duplicate pages")
     print("Note: Pages are archived and can be restored from Notion's trash if needed")
 
 

@@ -107,10 +107,11 @@ class NotionController:
         except Exception as e:
             print(f"Error debugging database schema: {e}")
 
-    def check_contact_exists(self, database_id, contact_name):
-        """Check if a contact already exists in the database"""
-
-        def query_contact():
+    def check_contact_exists(self, database_id, contact_name, phone=None):
+        """Check if a contact already exists in the database by name or phone"""
+        
+        # First check by name
+        def query_by_name():
             return self.notion_client.databases.query(
                 database_id=database_id,
                 filter={
@@ -120,11 +121,50 @@ class NotionController:
             )
 
         try:
-            response = self.notion_request_with_retry(query_contact)
-            return len(response.get("results", [])) > 0  # type: ignore
+            response = self.notion_request_with_retry(query_by_name)
+            if len(response.get("results", [])) > 0:  # type: ignore
+                return True
         except Exception as e:
-            print(f"Error checking contact {contact_name}: {e}")
-            return False  # Assume it doesn't exist if we can't check
+            print(f"Error checking contact {contact_name} by name: {e}")
+        
+        # If phone is provided, also check by phone number
+        if phone and phone != "No phone":
+            # Normalize phone number
+            normalized_phone = "".join(c for c in phone if c.isdigit() or c == "+")
+            
+            # Try checking with Phone property (rich_text type)
+            def query_by_phone():
+                return self.notion_client.databases.query(
+                    database_id=database_id,
+                    filter={
+                        "property": "Phone",
+                        "rich_text": {"contains": normalized_phone[-10:]},  # Last 10 digits
+                    },
+                    page_size=100,
+                )
+            
+            try:
+                response = self.notion_request_with_retry(query_by_phone)
+                results = response.get("results", [])  # type: ignore
+                
+                # Check if any result has the same normalized phone
+                for page in results:
+                    props = page.get("properties", {})
+                    phone_prop = props.get("Phone", {})
+                    
+                    if phone_prop.get("type") == "rich_text":
+                        texts = phone_prop.get("rich_text", [])
+                        if texts:
+                            existing_phone = texts[0].get("plain_text", "")
+                            existing_normalized = "".join(c for c in existing_phone if c.isdigit() or c == "+")
+                            if existing_normalized == normalized_phone:
+                                print(f"Found duplicate by phone: {contact_name} ({phone})")
+                                return True
+                
+            except Exception as e:
+                print(f"Error checking contact by phone {phone}: {e}")
+        
+        return False  # Contact doesn't exist
 
     def entry_exists_in_database(
         self, database_id, property_name, value, property_type="title"
@@ -273,12 +313,13 @@ class NotionController:
 
         for i, contact in enumerate(contacts_list):
             contact_name = contact[0]
+            phone = contact[2] if len(contact) > 2 else None
             print(f"Checking {i+1}/{len(contacts_list)}: {contact_name}")
 
-            if not self.check_contact_exists(database_id, contact_name):
+            if not self.check_contact_exists(database_id, contact_name, phone):
                 filtered_contacts.append(contact)
             else:
-                print(f"Removed duplicate: {contact_name}")
+                print(f"Removed duplicate: {contact_name} ({phone})")
 
             # Rate limiting
             time.sleep(0.1)
