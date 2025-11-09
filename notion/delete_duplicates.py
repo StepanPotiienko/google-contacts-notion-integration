@@ -20,14 +20,12 @@ def print_first_n_entries_of_a_dict(n: int, iterable) -> list:
     return list(itertools.islice(iterable, n))
 
 
-def return_database_chunk(notion, database_id: str, buffer_size: int) -> dict:
-    """Fetch a chunk of the Notion database of size buffer_size and return it"""
+def return_database_chunk(notion, database_id: str) -> dict:
+    """Fetch a chunk of the Notion database and return it"""
     data = notion.databases.query(database_id)
     database_object = data["object"]
     has_more = data["has_more"]
     next_cursor = data["next_cursor"]
-
-    buffer = []
 
     while has_more:
         data_while = notion.databases.query(database_id, start_cursor=next_cursor)
@@ -39,14 +37,9 @@ def return_database_chunk(notion, database_id: str, buffer_size: int) -> dict:
         next_cursor = data_while["next_cursor"]
 
         print(f"Fetched {len(data['results'])} pages so far...")
-        buffer.extend(data["results"])
 
         # Rate limiting
         time.sleep(0.5)
-
-        if len(buffer) > buffer_size:
-            print(f"Buffer is full. Returning {buffer_size} pages... ")
-            break
 
     return {
         "object": database_object,
@@ -272,9 +265,7 @@ def main():
     notion = Client(auth=NOTION_TOKEN)
 
     print("Fetching database result...")
-    result = return_database_chunk(notion, DATABASE_ID, buffer_size=50_000).get(
-        "results", []
-    )
+    result = return_database_chunk(notion, DATABASE_ID).get("results", [])
 
     print(f"Found {len(result)} total result")
 
@@ -346,3 +337,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# docker build -f notion/Dockerfile -t notion-app .
