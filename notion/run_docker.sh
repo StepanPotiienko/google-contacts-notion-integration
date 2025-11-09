@@ -120,6 +120,7 @@ docker run \
     --rm \
     --name "$CONTAINER_NAME" \
     -v "$PROJECT_ROOT/notion:/app" \
+    -v "$PROJECT_ROOT/.env:/app/.env" \
     "$IMAGE_NAME"
 
 # Capture exit code
