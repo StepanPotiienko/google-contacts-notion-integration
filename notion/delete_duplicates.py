@@ -9,7 +9,11 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 from notion_client import Client
-from notion_client.errors import RequestTimeoutError, APIResponseError
+from notion_client.errors import (
+    RequestTimeoutError,
+    APIResponseError,
+    HTTPResponseError,
+)
 
 load_dotenv()
 
@@ -119,6 +123,24 @@ def return_database_chunk(notion, database_id: str) -> dict:
             delay = base_delay * (2 ** (retry_count - 1))
             print(
                 f"\nAPI error: {e}. Retry {retry_count}/{max_retries} after {delay}s..."
+            )
+            time.sleep(delay)
+            continue
+
+        except HTTPResponseError as e:
+            retry_count += 1
+            if retry_count > max_retries:
+                print(
+                    f"\nMax retries ({max_retries}) reached. Progress saved to {PROGRESS_FILE}"
+                )
+                print(
+                    f"You can run the script again to resume from {len(all_results)} pages."
+                )
+                raise
+
+            delay = base_delay * (2 ** (retry_count - 1))
+            print(
+                f"\nHTTP error (status {e.status}): {e}. Retry {retry_count}/{max_retries} after {delay}s..."
             )
             time.sleep(delay)
             continue
@@ -357,7 +379,7 @@ def main():
     print("Fetching database result...")
     try:
         result = return_database_chunk(notion, DATABASE_ID).get("results", [])
-    except (RequestTimeoutError, APIResponseError) as e:
+    except (RequestTimeoutError, APIResponseError, HTTPResponseError) as e:
         print(f"\nError fetching database: {e}")
         print("Progress has been saved. Run the script again to resume.")
         return
@@ -428,7 +450,7 @@ def main():
                     f"Deleted: {page['title']} (Created: {page['created_time'][:10]})"
                 )
                 time.sleep(0.3)  # Rate limiting
-            except (RequestTimeoutError, APIResponseError) as e:
+            except (RequestTimeoutError, APIResponseError, HTTPResponseError) as e:
                 print(f"Failed to delete {page['title']} ({page['id']}): {e}")
 
     print(f"\nSuccessfully deleted {deleted_count} duplicate pages")
