@@ -25,29 +25,31 @@ def print_first_n_entries_of_a_dict(n: int, iterable) -> list:
 
 def return_database_chunk(notion, database_id: str) -> dict:
     """Fetch a chunk of the Notion database and return it with retry logic"""
-    
+
     max_retries = 5
     base_delay = 2
-    
+
     # Try to load progress from previous run
     all_results = []
     start_cursor = None
-    
+
     if os.path.exists(PROGRESS_FILE):
         try:
-            with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
+            with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
                 progress = json.load(f)
                 all_results = progress.get("results", [])
                 start_cursor = progress.get("next_cursor")
-                print(f"Resuming from previous run with {len(all_results)} pages already fetched...")
+                print(
+                    f"Resuming from previous run with {len(all_results)} pages already fetched..."
+                )
         except IOError as e:
             print(f"Could not load progress file: {e}")
             all_results = []
             start_cursor = None
-    
+
     has_more = True
     retry_count = 0
-    
+
     while has_more:
         try:
             # Query with current cursor
@@ -55,57 +57,72 @@ def return_database_chunk(notion, database_id: str) -> dict:
                 data = notion.databases.query(database_id, start_cursor=start_cursor)
             else:
                 data = notion.databases.query(database_id)
-            
+
             # Add results to our collection
             all_results.extend(data["results"])
-            
+
             has_more = data["has_more"]
             start_cursor = data["next_cursor"]
-            
+
             print(f"Fetched {len(all_results)} pages so far...")
-            
+
             # Save progress after each successful fetch
             try:
-                with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        "results": all_results,
-                        "next_cursor": start_cursor,
-                        "has_more": has_more
-                    }, f)
+                with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "results": all_results,
+                            "next_cursor": start_cursor,
+                            "has_more": has_more,
+                        },
+                        f,
+                    )
             except IOError as e:
                 print(f"Warning: Could not save progress: {e}")
-            
+
             # Reset retry count on success
             retry_count = 0
-            
+
             # Rate limiting - be gentle with the API
             time.sleep(0.5)
-            
+
         except RequestTimeoutError as e:
             retry_count += 1
             if retry_count > max_retries:
-                print(f"\nMax retries ({max_retries}) reached. Progress saved to {PROGRESS_FILE}")
-                print(f"You can run the script again to resume from {len(all_results)} pages.")
+                print(
+                    f"\nMax retries ({max_retries}) reached. Progress saved to {PROGRESS_FILE}"
+                )
+                print(
+                    f"You can run the script again to resume from {len(all_results)} pages."
+                )
                 raise
-            
+
             delay = base_delay * (2 ** (retry_count - 1))  # Exponential backoff
-            print(f"\nTimeout error! Retry {retry_count}/{max_retries} after {delay}s...")
+            print(
+                f"\nTimeout error! Retry {retry_count}/{max_retries} after {delay}s..."
+            )
             print(f"Progress: {len(all_results)} pages fetched so far")
             time.sleep(delay)
             continue
-            
+
         except APIResponseError as e:
             retry_count += 1
             if retry_count > max_retries:
-                print(f"\nMax retries ({max_retries}) reached. Progress saved to {PROGRESS_FILE}")
-                print(f"You can run the script again to resume from {len(all_results)} pages.")
+                print(
+                    f"\nMax retries ({max_retries}) reached. Progress saved to {PROGRESS_FILE}"
+                )
+                print(
+                    f"You can run the script again to resume from {len(all_results)} pages."
+                )
                 raise
-            
+
             delay = base_delay * (2 ** (retry_count - 1))
-            print(f"\nAPI error: {e}. Retry {retry_count}/{max_retries} after {delay}s...")
+            print(
+                f"\nAPI error: {e}. Retry {retry_count}/{max_retries} after {delay}s..."
+            )
             time.sleep(delay)
             continue
-    
+
     # Clean up progress file on successful completion
     if os.path.exists(PROGRESS_FILE):
         try:
@@ -113,7 +130,7 @@ def return_database_chunk(notion, database_id: str) -> dict:
             print("Fetch completed successfully. Progress file cleaned up.")
         except OSError:
             pass
-    
+
     return {
         "object": "list",
         "results": all_results,
