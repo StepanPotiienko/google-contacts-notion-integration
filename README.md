@@ -66,7 +66,7 @@ AgroprideOS/
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/StepanPotiienko/google-contacts-notion-integration.git
+   git clone https://github.com/StepanPotiienko/google-contacts-notion-integration.git AgroprideOS/
    cd AgroprideOS
    ```
 
