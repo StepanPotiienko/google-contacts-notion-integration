@@ -81,6 +81,9 @@ run_container() {
     trap "rm -f $TMP_ENV" EXIT
   fi
 
+  # Ensure Python can import the repo root (for notion package)
+  DOCKER_RUN_ARGS+=(-e PYTHONPATH=/app)
+
   if [[ -n "$CREDENTIALS_PATH" ]]; then
     # mount into container path expected by the app
     abs_creds="$(cd "$(dirname "$CREDENTIALS_PATH")" && pwd)/$(basename "$CREDENTIALS_PATH")"
