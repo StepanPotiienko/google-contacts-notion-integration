@@ -41,8 +41,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run script
-        working-directory: google-contacts-integration
-        run: python main.py
+        run: python google-contacts-integration/main.py
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
