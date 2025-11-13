@@ -8,19 +8,22 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Retreat sync_token.txt
+      - name: Restore sync_token.txt
         uses: actions/cache@v4
         with:
           # Cache the sync token inside the integration directory
           path: google-contacts-integration/sync_token.txt
-          key: sync-token-cache
+          # Use a unique key per run so changes persist; restore latest available
+          key: sync-token-${{ github.run_id }}
           restore-keys: |
-            sync-token-cache
+            sync-token-
 
       - name: Set up Python
         uses: actions/setup-python@v5
