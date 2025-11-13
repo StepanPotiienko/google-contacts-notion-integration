@@ -17,8 +17,9 @@ COPY notion /app/notion
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-WORKDIR /app/google-contacts-integration
+# Keep WORKDIR at /app so Python can resolve `import notion.notion_controller`
+# The notion/ directory is a sibling to google-contacts-integration/
 
 # Do NOT bake credentials/tokens into the image. Mount them at runtime.
 # Default command runs the main sync script
-CMD ["python", "main.py"]
+CMD ["python", "google-contacts-integration/main.py"]
