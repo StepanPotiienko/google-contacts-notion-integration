@@ -74,7 +74,11 @@ run_container() {
   DOCKER_RUN_ARGS=(--rm -it)
 
   if [[ -n "$ENV_FILE" ]]; then
-    DOCKER_RUN_ARGS+=(--env-file "$ENV_FILE")
+    # Docker --env-file doesn't support 'export' keyword, so strip it
+    TMP_ENV=$(mktemp)
+    sed 's/^export //' "$ENV_FILE" > "$TMP_ENV"
+    DOCKER_RUN_ARGS+=(--env-file "$TMP_ENV")
+    trap "rm -f $TMP_ENV" EXIT
   fi
 
   if [[ -n "$CREDENTIALS_PATH" ]]; then
