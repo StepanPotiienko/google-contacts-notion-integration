@@ -49,7 +49,7 @@ def update_sync_token(token: str | None = None) -> str | None:
         try:
             with open(SYNC_TOKEN_FILE, "w", encoding="UTF-8") as f:
                 f.write(token)
-            print(f"Sync token saved successfully")
+            print("Sync token saved successfully")
         except IOError as e:
             print(f"Error saving sync token: {e}")
         return None
@@ -59,7 +59,7 @@ def update_sync_token(token: str | None = None) -> str | None:
             with open(SYNC_TOKEN_FILE, "r", encoding="UTF-8") as f:
                 token = f.read().strip()
                 if token:
-                    print(f"Using existing sync token")
+                    print("Using existing sync token")
                     return token
                 print("Sync token file is empty")
         except IOError as e:
@@ -122,7 +122,6 @@ def incremental_sync(service, token: str):
     except HttpError as e:
         if e.resp.status in (400, 410):  # invalid/expired sync token
             print("Sync token expired or invalid. Running full sync...")
-            # Delete the old token file
             if os.path.exists(SYNC_TOKEN_FILE):
                 os.remove(SYNC_TOKEN_FILE)
             full_sync(service)
@@ -187,12 +186,22 @@ def main():
 
         time.sleep(2)
 
-        notion_controller.delete_duplicates_in_database(
-            database_id=os.environ["CRM_DATABASE_ID"],
+        # Clean up existing duplicates in Notion first (keeps the most recent)
+        # This archives older pages with the same Name property.
+        if os.environ.get("CRM_DATABASE_ID"):
+            notion_controller.notion_controller.delete_name_duplicates(
+                database_id=os.environ["CRM_DATABASE_ID"]
+            )
+
+        # Filter out contacts that already exist in the database so we don't create duplicates
+        # `delete_duplicates_in_database` returns a filtered list (keeps only new contacts)
+        contacts_to_create = notion_controller.delete_duplicates_in_database(
+            database_id=os.environ.get("CRM_DATABASE_ID", ""),
             contacts_list=contacts_list,
         )
-        notion_controller.connect_to_notion_database()
-        notion_controller.find_missing_tasks(contacts_list)
+
+        # Finally, create missing tasks/pages for new contacts
+        notion_controller.find_missing_tasks(contacts_to_create)
 
     except Exception as e:
         print(f"Script failed with error: {e}")
