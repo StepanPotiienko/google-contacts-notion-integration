@@ -5,6 +5,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Add /app to PYTHONPATH so Python can find the notion module
+ENV PYTHONPATH=/app
+
 # Install minimal build deps required by some wheels
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libffi-dev \
