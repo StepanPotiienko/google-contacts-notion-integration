@@ -25,6 +25,16 @@ jobs:
           restore-keys: |
             sync-token-
 
+      - name: Restore deduplication checkpoint
+        uses: actions/cache@v4
+        with:
+          # Cache the deduplication checkpoint to allow resuming across runs
+          path: dedup_checkpoint.json
+          # Use rolling cache so each run can resume from the last
+          key: dedup-checkpoint-${{ github.run_id }}
+          restore-keys: |
+            dedup-checkpoint-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

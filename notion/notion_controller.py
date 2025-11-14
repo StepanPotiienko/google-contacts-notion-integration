@@ -214,8 +214,24 @@ class NotionController:
             return False
 
     def delete_name_duplicates(self, database_id: str):
-        """Delete duplicates in database based on Name property with batching to avoid 502 errors"""
+        """Delete duplicates in database based on Name property with optimized batching"""
         print(f"Checking for duplicates in database: {database_id}")
+
+        # Load checkpoint if it exists
+        checkpoint_file = "dedup_checkpoint.json"
+        processed_pages = set()
+        if os.path.exists(checkpoint_file):
+            import json
+
+            try:
+                with open(checkpoint_file, "r") as f:
+                    checkpoint = json.load(f)
+                    processed_pages = set(checkpoint.get("processed_pages", []))
+                    print(
+                        f"Resuming from checkpoint: {len(processed_pages)} pages already processed"
+                    )
+            except Exception as e:
+                print(f"Warning: Could not load checkpoint: {e}")
 
         all_pages = []
         start_cursor = None
@@ -263,6 +279,9 @@ class NotionController:
 
         if not duplicates:
             print("No duplicates found!")
+            # Clean up checkpoint file if exists
+            if os.path.exists(checkpoint_file):
+                os.remove(checkpoint_file)
             return
 
         print(f"Found {len(duplicates)} duplicate entries:")
@@ -274,11 +293,29 @@ class NotionController:
             pages.sort(key=lambda x: x["last_edited_time"], reverse=True)
             all_pages_to_delete.extend(pages[1:])
 
-        print(f"\nStarting deletion of {len(all_pages_to_delete)} pages in batches...")
+        # Filter out already processed pages
+        if processed_pages:
+            all_pages_to_delete = [
+                p for p in all_pages_to_delete if p["page_id"] not in processed_pages
+            ]
+            print(f"Skipping {len(processed_pages)} already processed pages")
 
-        batch_size = 5
+        if not all_pages_to_delete:
+            print("All duplicates already processed!")
+            if os.path.exists(checkpoint_file):
+                os.remove(checkpoint_file)
+            return
+
+        print(f"\nStarting deletion of {len(all_pages_to_delete)} pages...")
+
+        batch_size = 10  # Increased from 5
         deleted_count = 0
+        failed_count = 0
         batch_count = 0
+
+        # Progress tracking
+        start_time = time.time()
+        last_progress_time = start_time
 
         for i, page_info in enumerate(all_pages_to_delete):
             try:
@@ -290,48 +327,150 @@ class NotionController:
 
                 self.notion_request_with_retry(delete_page)
                 deleted_count += 1
-                print(
-                    f"Deleted {i+1}/{len(all_pages_to_delete)}: {page_info['page_id']}"
-                )
+                processed_pages.add(page_info["page_id"])
 
+                # Show progress every 100 pages instead of every page
+                if (i + 1) % 100 == 0 or (i + 1) == len(all_pages_to_delete):
+                    elapsed = time.time() - start_time
+                    rate = (i + 1) / elapsed if elapsed > 0 else 0
+                    remaining = len(all_pages_to_delete) - (i + 1)
+                    eta_seconds = remaining / rate if rate > 0 else 0
+                    eta_minutes = eta_seconds / 60
+                    print(
+                        f"Progress: {i+1}/{len(all_pages_to_delete)} "
+                        f"({deleted_count} deleted, {failed_count} failed) "
+                        f"- Rate: {rate:.1f} pages/sec - ETA: {eta_minutes:.1f} min"
+                    )
+
+                # Reduced sleep times - only sleep after batches, not individual pages
                 if (i + 1) % batch_size == 0:
                     batch_count += 1
-                    print(
-                        f"\nBatch {batch_count} completed ({batch_size} pages).\
-                            Waiting 5 seconds before next batch..."
-                    )
-                    time.sleep(5)
-                else:
-                    time.sleep(0.3)
+                    # Save checkpoint every batch
+                    import json
+
+                    try:
+                        with open(checkpoint_file, "w") as f:
+                            json.dump({"processed_pages": list(processed_pages)}, f)
+                    except Exception as e:
+                        print(f"Warning: Could not save checkpoint: {e}")
+
+                    # Reduced delay from 5s to 1s between batches
+                    time.sleep(1)
 
             except Exception as e:
+                failed_count += 1
                 print(f"Failed to delete page {page_info['page_id']}: {e}")
+                # Continue processing even if one fails
 
-            print(
-                f"\nDeletion completed! Successfully removed \
-                    {deleted_count}/{len(all_pages_to_delete)} duplicate pages."
-            )
+        print(
+            f"\nDeletion completed! Successfully removed "
+            f"{deleted_count}/{len(all_pages_to_delete)} duplicate pages "
+            f"({failed_count} failed)."
+        )
+
+        # Clean up checkpoint file on successful completion
+        if os.path.exists(checkpoint_file):
+            os.remove(checkpoint_file)
+            print("Checkpoint file cleaned up.")
 
     def delete_duplicate_contacts_in_database(self, database_id, contacts_list):
-        """Remove contacts that already exist in the database"""
+        """Remove contacts that already exist in the database using batch fetch approach"""
         print("Checking for duplicates...")
+
+        if not contacts_list:
+            return []
+
+        # Fetch all existing contacts once (batch approach)
+        print("Fetching existing contacts from database...")
+        existing_contacts = self._get_all_contacts_map(database_id)
+        print(f"Found {len(existing_contacts)} existing contacts in database")
+
         filtered_contacts = []
+        duplicate_count = 0
 
         for i, contact in enumerate(contacts_list):
             contact_name = contact[0]
             phone = contact[2] if len(contact) > 2 else None
-            print(f"Checking {i+1}/{len(contacts_list)}: {contact_name}")
+            normalized_phone = (
+                self._normalize_phone(phone) if phone and phone != "No phone" else None
+            )
 
-            if not self.check_contact_exists(database_id, contact_name, phone):
+            # Check in-memory against fetched data
+            is_duplicate = False
+
+            # Check by name
+            if contact_name in existing_contacts["by_name"]:
+                is_duplicate = True
+            # Check by phone if available
+            elif normalized_phone and normalized_phone in existing_contacts["by_phone"]:
+                is_duplicate = True
+
+            if not is_duplicate:
                 filtered_contacts.append(contact)
             else:
-                print(f"Removed duplicate: {contact_name} ({phone})")
+                duplicate_count += 1
+                if (i + 1) % 100 == 0 or (i + 1) == len(contacts_list):
+                    print(
+                        f"Progress: {i+1}/{len(contacts_list)} checked, {duplicate_count} duplicates found"
+                    )
 
-            # Rate limiting
-            time.sleep(0.1)
-
-        print(f"{len(filtered_contacts)} contacts remaining after cleaning up")
+        print(f"Removed {duplicate_count} duplicates")
+        print(f"{len(filtered_contacts)} new contacts remaining after cleanup")
         return filtered_contacts
+
+    def _normalize_phone(self, phone):
+        """Normalize phone number by removing non-digit characters except +"""
+        if not phone:
+            return ""
+        return "".join(c for c in phone if c.isdigit() or c == "+")
+
+    def _get_all_contacts_map(self, database_id):
+        """Fetch all contacts from database and create lookup maps by name and phone"""
+        all_pages = []
+        start_cursor = None
+        has_more = True
+
+        while has_more:
+
+            def query_page():
+                params = {"database_id": database_id, "page_size": 100}
+                if start_cursor:
+                    params["start_cursor"] = start_cursor
+                return self.notion_client.databases.query(**params)
+
+            response = self.notion_request_with_retry(query_page)
+            all_pages.extend(response["results"])
+            has_more = response.get("has_more", False)
+            start_cursor = response.get("next_cursor")
+
+            if len(all_pages) % 1000 == 0:
+                print(f"Fetched {len(all_pages)} pages...")
+
+        # Build lookup maps
+        by_name = set()
+        by_phone = set()
+
+        for page in all_pages:
+            props = page.get("properties", {})
+
+            # Extract name
+            title_prop = props.get("Name", {}).get("title", [])
+            if title_prop:
+                name = title_prop[0].get("plain_text", "")
+                if name:
+                    by_name.add(name)
+
+            # Extract phone
+            phone_prop = props.get("Phone", {})
+            if phone_prop.get("type") == "rich_text":
+                texts = phone_prop.get("rich_text", [])
+                if texts:
+                    phone = texts[0].get("plain_text", "")
+                    normalized = self._normalize_phone(phone)
+                    if normalized:
+                        by_phone.add(normalized)
+
+        return {"by_name": by_name, "by_phone": by_phone}
 
     def get_all_existing_tasks(self):
         """Get all existing tasks from the database with pagination"""
@@ -407,28 +546,32 @@ class NotionController:
 
         print(f"Starting sync with {len(contacts_list)} contacts...")
 
-        existing_tasks = self.get_all_existing_tasks()
-
-        # Do not exist in the database yet
-        new_contacts = [
-            contact for contact in contacts_list if contact[0] not in existing_tasks
-        ]
-
-        print(f"Found {len(new_contacts)} new contacts to create")
+        # Note: contacts_list is already filtered by delete_duplicate_contacts_in_database
+        # No need to fetch all existing tasks again - that would take 2+ hours!
 
         success_count = 0
-        for i, contact in enumerate(new_contacts):
+        failed_count = 0
+
+        for i, contact in enumerate(contacts_list):
             contact_name = contact[0]
-            print(f"Creating {i+1}/{len(new_contacts)}: {contact_name}")
+
+            # Show progress every 10 contacts
+            if (i + 1) % 10 == 0 or (i + 1) == len(contacts_list):
+                print(
+                    f"Progress: {i+1}/{len(contacts_list)} ({success_count} created, {failed_count} failed)"
+                )
 
             if self.create_contact_page(contact):
                 success_count += 1
+            else:
+                failed_count += 1
 
-            # Rate limiting
-            time.sleep(0.5)
+            # Rate limiting - reduced from 0.5s to 0.1s
+            time.sleep(0.1)
 
         print(
-            f"Sync completed! Successfully created {success_count}/{len(new_contacts)} contacts"
+            f"Sync completed! Successfully created {success_count}/{len(contacts_list)} contacts "
+            f"({failed_count} failed)"
         )
 
 
