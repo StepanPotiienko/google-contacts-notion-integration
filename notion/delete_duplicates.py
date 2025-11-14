@@ -87,8 +87,8 @@ def return_database_chunk(notion, database_id: str) -> dict:
             # Reset retry count on success
             retry_count = 0
 
-            # Rate limiting - be gentle with the API
-            time.sleep(0.5)
+            # Rate limiting
+            time.sleep(0.1)
 
         except RequestTimeoutError as e:
             retry_count += 1
@@ -284,7 +284,11 @@ def find_duplicate_pages(pages):
     phone_groups = defaultdict(list)
     hash_groups = defaultdict(list)
 
-    for page in pages:
+    print(f"Analyzing {len(pages)} pages for duplicates...")
+
+    for i, page in enumerate(pages):
+        if (i + 1) % 1000 == 0:
+            print(f"Analyzed {i + 1}/{len(pages)} pages...")
         page_title = get_page_title(page)
         phone = get_phone_number(page)
         normalized_phone = normalize_phone(phone)
@@ -368,6 +372,10 @@ def delete_page(notion, page_id):
 
 def main():
     """Main function"""
+    import time as time_module
+
+    start_time = time_module.time()
+
     if not NOTION_TOKEN or not DATABASE_ID:
         print(
             "Error: Please ensure NOTION_TOKEN and NOTION_DATABASE_ID are in your .env file"
@@ -446,15 +454,20 @@ def main():
             try:
                 delete_page(notion, page["id"])
                 deleted_count += 1
-                print(
-                    f"Deleted: {page['title']} (Created: {page['created_time'][:10]})"
-                )
-                time.sleep(0.3)  # Rate limiting
+                # Show progress every 50 deletions instead of every single one
+                if deleted_count % 50 == 0 or deleted_count == len(pages_to_delete):
+                    print(f"Deleted {deleted_count}/{len(pages_to_delete)} pages...")
+                time.sleep(0.1)  # Rate limiting
             except (RequestTimeoutError, APIResponseError, HTTPResponseError) as e:
                 print(f"Failed to delete {page['title']} ({page['id']}): {e}")
 
     print(f"\nSuccessfully deleted {deleted_count} duplicate pages")
     print("Note: Pages are archived and can be restored from Notion's trash if needed")
+
+    elapsed = time_module.time() - start_time
+    minutes = int(elapsed // 60)
+    seconds = int(elapsed % 60)
+    print(f"\nTotal execution time: {minutes}m {seconds}s")
 
 
 if __name__ == "__main__":

@@ -73,8 +73,12 @@ def full_sync(service):
     print("Performing full sync...")
     results = _fetch_connections(service, request_sync_token=True)
 
+    total_contacts = 0
     for person in results.get("connections", []):
         handle_person(person)
+        total_contacts += 1
+
+    print(f"Fetched {total_contacts} contacts...")
 
     while "nextPageToken" in results:
         results = _fetch_connections(
@@ -82,13 +86,16 @@ def full_sync(service):
             request_sync_token=True,
             page_token=results["nextPageToken"],
         )
+        page_count = len(results.get("connections", []))
         for person in results.get("connections", []):
             handle_person(person)
+        total_contacts += page_count
+        print(f"Fetched {total_contacts} contacts...")
 
     next_token = results.get("nextSyncToken")
     if next_token:
         update_sync_token(next_token)
-        print("Full sync complete. Token updated.")
+        print(f"Full sync complete. Total: {total_contacts} contacts. Token updated.")
 
 
 def incremental_sync(service, token: str):
