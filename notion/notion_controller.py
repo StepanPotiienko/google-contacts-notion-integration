@@ -73,7 +73,7 @@ class NotionController:
             print(f"Found {len(tasks_list)} tasks in database")
             return tasks_list
 
-        except Exception as e:
+        except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
             print(f"Error connecting to Notion database: {e}")
             return tasks_list
 
@@ -104,7 +104,7 @@ class NotionController:
             print("Database schema:")
             for name, prop in db["properties"].items():  # type: ignore
                 print(f"- {name}: {prop['type']}")
-        except Exception as e:
+        except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
             print(f"Error debugging database schema: {e}")
 
     def check_contact_exists(self, database_id, contact_name, phone=None):
@@ -124,7 +124,7 @@ class NotionController:
             response = self.notion_request_with_retry(query_by_name)
             if len(response.get("results", [])) > 0:  # type: ignore
                 return True
-        except Exception as e:
+        except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
             print(f"Error checking contact {contact_name} by name: {e}")
 
         # If phone is provided, also check by phone number
@@ -167,7 +167,7 @@ class NotionController:
                                 )
                                 return True
 
-            except Exception as e:
+            except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
                 print(f"Error checking contact by phone {phone}: {e}")
 
         return False  # Contact doesn't exist
@@ -213,8 +213,13 @@ class NotionController:
         ):
             return False
 
-    def delete_name_duplicates(self, database_id: str):
-        """Delete duplicates in database based on Name property with optimized batching"""
+    def delete_name_duplicates(self, database_id: str, max_minutes: int | None = None):
+        """Delete duplicates in database based on Name property with optimized batching.
+
+        If max_minutes is provided, the operation will stop after roughly that
+        amount of time, persist the checkpoint and exit early so a subsequent
+        run can resume from the saved checkpoint.
+        """
         print(f"Checking for duplicates in database: {database_id}")
 
         # Load checkpoint if it exists
@@ -224,13 +229,13 @@ class NotionController:
             import json
 
             try:
-                with open(checkpoint_file, "r") as f:
+                with open(checkpoint_file, "r", encoding="UTF-8") as f:
                     checkpoint = json.load(f)
                     processed_pages = set(checkpoint.get("processed_pages", []))
                     print(
                         f"Resuming from checkpoint: {len(processed_pages)} pages already processed"
                     )
-            except Exception as e:
+            except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
                 print(f"Warning: Could not load checkpoint: {e}")
 
         all_pages = []
@@ -315,19 +320,24 @@ class NotionController:
 
         # Progress tracking
         start_time = time.time()
-        last_progress_time = start_time
+        deadline = (
+            start_time + max_minutes * 60
+            if isinstance(max_minutes, int) and max_minutes > 0
+            else None
+        )
+        early_exit = False
 
         for i, page_info in enumerate(all_pages_to_delete):
-            try:
 
-                def delete_page():
-                    return self.notion_client.pages.update(
-                        page_id=page_info["page_id"], archived=True
-                    )
+            try:
+                pid = page_info["page_id"]
+
+                def delete_page(pid=pid):
+                    return self.notion_client.pages.update(page_id=pid, archived=True)
 
                 self.notion_request_with_retry(delete_page)
                 deleted_count += 1
-                processed_pages.add(page_info["page_id"])
+                processed_pages.add(pid)
 
                 # Show progress every 100 pages instead of every page
                 if (i + 1) % 100 == 0 or (i + 1) == len(all_pages_to_delete):
@@ -357,6 +367,12 @@ class NotionController:
                     # Reduced delay from 5s to 1s between batches
                     time.sleep(1)
 
+                # If a time budget is set, check it after each iteration
+                if deadline is not None and time.time() >= deadline:
+                    early_exit = True
+                    print("Time budget reached. Saving checkpoint and exiting early.")
+                    break
+
             except Exception as e:
                 failed_count += 1
                 print(f"Failed to delete page {page_info['page_id']}: {e}")
@@ -368,8 +384,8 @@ class NotionController:
             f"({failed_count} failed)."
         )
 
-        # Clean up checkpoint file on successful completion
-        if os.path.exists(checkpoint_file):
+        # Clean up checkpoint file on successful completion only if we did not exit early
+        if not early_exit and os.path.exists(checkpoint_file):
             os.remove(checkpoint_file)
             print("Checkpoint file cleaned up.")
 
@@ -439,9 +455,9 @@ class NotionController:
                 return self.notion_client.databases.query(**params)
 
             response = self.notion_request_with_retry(query_page)
-            all_pages.extend(response["results"])
-            has_more = response.get("has_more", False)
-            start_cursor = response.get("next_cursor")
+            all_pages.extend(response["results"])  # type: ignore
+            has_more = response.get("has_more", False)  # type: ignore
+            start_cursor = response.get("next_cursor")  # type: ignore
 
             if len(all_pages) % 1000 == 0:
                 print(f"Fetched {len(all_pages)} pages...")
@@ -553,8 +569,6 @@ class NotionController:
         failed_count = 0
 
         for i, contact in enumerate(contacts_list):
-            contact_name = contact[0]
-
             # Show progress every 10 contacts
             if (i + 1) % 10 == 0 or (i + 1) == len(contacts_list):
                 print(

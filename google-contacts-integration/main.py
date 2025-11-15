@@ -2,6 +2,7 @@
 
 import os
 import time
+import argparse
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -181,34 +182,52 @@ def get_contacts_list(person: dict):
 
 def main():
     """Run the script"""
+    parser = argparse.ArgumentParser(description="Google Contacts ↔ Notion sync")
+    parser.add_argument(
+        "--phase",
+        choices=["google-sync", "dedup", "contacts", "all"],
+        default="all",
+        help="Which part to run",
+    )
+    parser.add_argument(
+        "--dedup-max-minutes",
+        type=int,
+        default=int(os.environ.get("DEDUP_MAX_MINUTES", "0") or 0),
+        help="Timebox Notion duplicate cleanup to N minutes (0 = unlimited)",
+    )
+    args = parser.parse_args()
     try:
         creds = get_credentials()
         service = build("people", "v1", credentials=creds)
 
-        token = update_sync_token()
-        if token:
-            incremental_sync(service, token)
-        else:
-            full_sync(service)
+        # Phase: Google contacts sync
+        if args.phase in ("google-sync", "all"):
+            token = update_sync_token()
+            if token:
+                incremental_sync(service, token)
+            else:
+                full_sync(service)
 
-        time.sleep(2)
+        # Small pause to be gentle with rate limits
+        if args.phase == "all":
+            time.sleep(2)
 
-        # Clean up existing duplicates in Notion first (keeps the most recent)
-        # This archives older pages with the same Name property.
-        if os.environ.get("CRM_DATABASE_ID"):
+        # Phase: Notion duplicate cleanup (by Name in CRM DB)
+        if args.phase in ("dedup", "all") and os.environ.get("CRM_DATABASE_ID"):
             notion_controller.notion_controller.delete_name_duplicates(
-                database_id=os.environ["CRM_DATABASE_ID"]
+                database_id=os.environ["CRM_DATABASE_ID"],
+                max_minutes=(
+                    args.dedup_max_minutes if args.dedup_max_minutes > 0 else None
+                ),
             )
 
-        # Filter out contacts that already exist in the database so we don't create duplicates
-        # `delete_duplicates_in_database` returns a filtered list (keeps only new contacts)
-        contacts_to_create = notion_controller.delete_duplicates_in_database(
-            database_id=os.environ.get("CRM_DATABASE_ID", ""),
-            contacts_list=contacts_list,
-        )
-
-        # Finally, create missing tasks/pages for new contacts
-        notion_controller.find_missing_tasks(contacts_to_create)
+        # Phase: contacts push into Notion
+        if args.phase in ("contacts", "all"):
+            contacts_to_create = notion_controller.delete_duplicates_in_database(
+                database_id=os.environ.get("CRM_DATABASE_ID", ""),
+                contacts_list=contacts_list,
+            )
+            notion_controller.find_missing_tasks(contacts_to_create)
 
     except Exception as e:
         print(f"Script failed with error: {e}")

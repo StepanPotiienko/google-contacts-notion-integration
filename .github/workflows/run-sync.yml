@@ -1,9 +1,8 @@
 name: "Run Google Contacts Notion Sync"
-
 on:
   schedule:
     - cron: "0 */6 * * *"
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   run-script:
@@ -14,24 +13,31 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        env: &common_env
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
+          PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
 
       - name: Restore sync_token.txt
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          # Cache the sync token inside the integration directory
-          path: google-contacts-integration/sync_token.txt
-          # Use a unique key per run so changes persist; restore latest available
-          key: sync-token-${{ github.run_id }}
+          # The script writes sync_token.txt at the repository root
+          path: sync_token.txt
+          # Use a rolling key so we always restore the latest saved token
+          key: sync-token-${{ github.run_number }}
           restore-keys: |
             sync-token-
 
       - name: Restore deduplication checkpoint
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           # Cache the deduplication checkpoint to allow resuming across runs
           path: dedup_checkpoint.json
           # Use rolling cache so each run can resume from the last
-          key: dedup-checkpoint-${{ github.run_id }}
+          key: dedup-checkpoint-${{ github.run_number }}
           restore-keys: |
             dedup-checkpoint-
 
@@ -53,13 +59,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run script
-        run: python google-contacts-integration/main.py
-        env:
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      - name: Google contacts sync (fast)
+        run: python google-contacts-integration/main.py --phase google-sync
+        env: *common_env
 
-          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
-          PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
+      - name: Save updated sync token
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: sync_token.txt
+          key: sync-token-${{ github.run_number }}
+
+      - name: Notion duplicate cleanup (timeboxed)
+        env:
+          <<: *common_env
+          DEDUP_MAX_MINUTES: 55
+        run: |
+          python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
+
+      - name: Save dedup checkpoint
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: dedup_checkpoint.json
+          key: dedup-checkpoint-${{ github.run_number }}
+
+      - name: Push new contacts to Notion
+        run: python google-contacts-integration/main.py --phase contacts
+        env: *common_env
