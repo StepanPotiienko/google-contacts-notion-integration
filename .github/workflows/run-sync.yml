@@ -51,7 +51,7 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            {{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
@@ -62,7 +62,7 @@ jobs:
         run: python google-contacts-integration/main.py --phase google-sync
 
       - name: Save updated sync token
-        if: always()
+        if: always() && hashFiles('sync_token.txt') != ''
         uses: actions/cache/save@v4
         with:
           path: sync_token.txt
@@ -75,7 +75,7 @@ jobs:
           python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
 
       - name: Save dedup checkpoint
-        if: always()
+        if: always() && hashFiles('dedup_checkpoint.json') != ''
         uses: actions/cache/save@v4
         with:
           path: dedup_checkpoint.json
