@@ -9,17 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+      CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
+      PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        env: &common_env
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
-          PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
 
       - name: Restore sync_token.txt
         uses: actions/cache/restore@v4
@@ -61,7 +60,6 @@ jobs:
 
       - name: Google contacts sync (fast)
         run: python google-contacts-integration/main.py --phase google-sync
-        env: *common_env
 
       - name: Save updated sync token
         if: always()
@@ -72,7 +70,6 @@ jobs:
 
       - name: Notion duplicate cleanup (timeboxed)
         env:
-          <<: *common_env
           DEDUP_MAX_MINUTES: 55
         run: |
           python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
@@ -86,4 +83,3 @@ jobs:
 
       - name: Push new contacts to Notion
         run: python google-contacts-integration/main.py --phase contacts
-        env: *common_env
