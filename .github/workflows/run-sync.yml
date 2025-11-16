@@ -1,8 +1,12 @@
 name: "Run Google Contacts Notion Sync"
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 * * * *"
   workflow_dispatch: {}
+
+concurrency:
+  group: sync-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-script:
@@ -51,7 +55,7 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            {{ runner.os }}-pip-
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
@@ -70,7 +74,7 @@ jobs:
 
       - name: Notion duplicate cleanup (timeboxed)
         env:
-          DEDUP_MAX_MINUTES: 55
+          DEDUP_MAX_MINUTES: 50
         run: |
           python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
 
