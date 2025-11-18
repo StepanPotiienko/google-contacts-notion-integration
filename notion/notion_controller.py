@@ -214,15 +214,17 @@ class NotionController:
             return False
 
     def delete_name_duplicates(self, database_id: str, max_minutes: int | None = None):
-        """Delete duplicates in database based on Name property with optimized batching.
+        """Stream through the database and archive duplicate pages as encountered.
 
-        If max_minutes is provided, the operation will stop after roughly that
-        amount of time, persist the checkpoint and exit early so a subsequent
-        run can resume from the saved checkpoint.
+        Efficient approach:
+        - Paginate instead of loading entire DB into memory.
+        - Maintain a set of seen names (canonical = first occurrence).
+        - Archive subsequent pages with same Name immediately (duplicate).
+        - Periodically checkpoint (cursor + seen names + stats) to allow resume.
+        - Respect optional time budget during both fetch and delete phases.
         """
-        print(f"Checking for duplicates in database: {database_id}")
+        print(f"Streaming duplicate cleanup for database: {database_id}")
 
-        # Track timing from the start
         start_time = time.time()
         deadline = (
             start_time + max_minutes * 60
@@ -230,172 +232,128 @@ class NotionController:
             else None
         )
 
-        # Load checkpoint if it exists
-        checkpoint_file = "dedup_checkpoint.json"
-        processed_pages = set()
-        if os.path.exists(checkpoint_file):
+        checkpoint_path = "dedup_checkpoint.json"
+        seen_names: set[str] = set()
+        deleted_count = 0
+        failed_count = 0
+        pages_scanned = 0
+        resume_cursor = None
+
+        # Load checkpoint if exists
+        if os.path.exists(checkpoint_path):
             import json
-
             try:
-                with open(checkpoint_file, "r", encoding="UTF-8") as f:
-                    checkpoint = json.load(f)
-                    processed_pages = set(checkpoint.get("processed_pages", []))
+                with open(checkpoint_path, "r", encoding="UTF-8") as f:
+                    data = json.load(f)
+                    seen_names = set(data.get("seen_names", []))
+                    resume_cursor = data.get("cursor")
+                    deleted_count = int(data.get("deleted_count", 0))
+                    pages_scanned = int(data.get("pages_scanned", 0))
                     print(
-                        f"Resuming from checkpoint: {len(processed_pages)} pages already processed"
+                        f"Resuming: {pages_scanned} pages scanned, {deleted_count} duplicates deleted."
                     )
-            except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
-                print(f"Warning: Could not load checkpoint: {e}")
+            except Exception as e:  # noqa: BLE001
+                print(f"Could not load checkpoint: {e}. Continuing without resume.")
 
-        all_pages = []
-        start_cursor = None
+        def save_checkpoint(next_cursor):
+            import json
+            try:
+                with open(checkpoint_path, "w", encoding="UTF-8") as f:
+                    json.dump(
+                        {
+                            "seen_names": list(seen_names),
+                            "cursor": next_cursor,
+                            "deleted_count": deleted_count,
+                            "pages_scanned": pages_scanned,
+                            "timestamp": time.time(),
+                        },
+                        f,
+                    )
+            except Exception as e:  # noqa: BLE001
+                print(f"Warning: failed to save checkpoint: {e}")
+
+        batch_delete_interval = 0  # no artificial delay unless rate limiting needed
+        checkpoint_every_pages = 500  # reduce write overhead
+
+        next_cursor = resume_cursor
         has_more = True
+        page_size = 100
+        early_exit = False
 
-        print("Fetching all pages from database...")
         while has_more:
-            # Check deadline during fetch phase
             if deadline is not None and time.time() >= deadline:
-                print(
-                    "Time budget reached during fetch phase. Exiting early without changes."
-                )
-                return
+                early_exit = True
+                print("Time budget reached mid-stream. Saving checkpoint and exiting.")
+                save_checkpoint(next_cursor)
+                break
 
             def query_page():
-                params = {"database_id": database_id, "page_size": 100}
-                if start_cursor:
-                    params["start_cursor"] = start_cursor
+                params = {"database_id": database_id, "page_size": page_size}
+                if next_cursor:
+                    params["start_cursor"] = next_cursor
                 return self.notion_client.databases.query(**params)
 
             response = self.notion_request_with_retry(query_page)
-            all_pages.extend(response["results"])  # type: ignore
+            results = response.get("results", [])  # type: ignore
             has_more = response.get("has_more", False)  # type: ignore
-            start_cursor = response.get("next_cursor")  # type: ignore
-            print(f"Fetched {len(response['results'])} pages...")  # type: ignore
+            next_cursor = response.get("next_cursor")  # type: ignore
 
-        print(f"Total pages in database: {len(all_pages)}")
+            for page in results:
+                pages_scanned += 1
+                props = page.get("properties", {})
+                title_prop = props.get("Name", {}).get("title", [])
+                name = title_prop[0].get("plain_text", "Untitled") if title_prop else "Untitled"
+                page_id = page.get("id")
 
-        name_to_pages = {}
+                if name in seen_names:
+                    # Duplicate: archive immediately
+                    try:
+                        def archive_page(pid=page_id):
+                            return self.notion_client.pages.update(page_id=pid, archived=True)
+                        self.notion_request_with_retry(archive_page)
+                        deleted_count += 1
+                    except Exception as e:  # noqa: BLE001
+                        failed_count += 1
+                        print(f"Failed to archive duplicate page {page_id}: {e}")
+                else:
+                    seen_names.add(name)
 
-        for page in all_pages:
-            props = page["properties"]
-            title_prop = props.get("Name", {}).get("title", [])
-            name = title_prop[0]["plain_text"] if title_prop else "Untitled"
-            page_id = page["id"]
-
-            if name not in name_to_pages:
-                name_to_pages[name] = []
-
-            name_to_pages[name].append(
-                {
-                    "page_id": page_id,
-                    "created_time": page.get("created_time", ""),
-                    "last_edited_time": page.get("last_edited_time", ""),
-                }
-            )
-
-        duplicates = {
-            name: pages for name, pages in name_to_pages.items() if len(pages) > 1
-        }
-
-        if not duplicates:
-            print("No duplicates found!")
-            # Clean up checkpoint file if exists
-            if os.path.exists(checkpoint_file):
-                os.remove(checkpoint_file)
-            return
-
-        print(f"Found {len(duplicates)} duplicate entries:")
-        for name, pages in duplicates.items():
-            print(f"  '{name}': {len(pages)} instances")
-
-        all_pages_to_delete = []
-        for name, pages in duplicates.items():
-            pages.sort(key=lambda x: x["last_edited_time"], reverse=True)
-            all_pages_to_delete.extend(pages[1:])
-
-        # Filter out already processed pages
-        if processed_pages:
-            all_pages_to_delete = [
-                p for p in all_pages_to_delete if p["page_id"] not in processed_pages
-            ]
-            print(f"Skipping {len(processed_pages)} already processed pages")
-
-        if not all_pages_to_delete:
-            print("All duplicates already processed!")
-            if os.path.exists(checkpoint_file):
-                os.remove(checkpoint_file)
-            return
-
-        print(f"\nStarting deletion of {len(all_pages_to_delete)} pages...")
-
-        batch_size = 10  # Increased from 5
-        deleted_count = 0
-        failed_count = 0
-        batch_count = 0
-
-        # Progress tracking (deadline already set at top of function)
-        early_exit = False
-
-        for i, page_info in enumerate(all_pages_to_delete):
-
-            try:
-                pid = page_info["page_id"]
-
-                def delete_page(pid=pid):
-                    return self.notion_client.pages.update(page_id=pid, archived=True)
-
-                self.notion_request_with_retry(delete_page)
-                deleted_count += 1
-                processed_pages.add(pid)
-
-                # Show progress every 100 pages instead of every page
-                if (i + 1) % 100 == 0 or (i + 1) == len(all_pages_to_delete):
+                # Progress output every 500 pages
+                if pages_scanned % 500 == 0:
                     elapsed = time.time() - start_time
-                    rate = (i + 1) / elapsed if elapsed > 0 else 0
-                    remaining = len(all_pages_to_delete) - (i + 1)
-                    eta_seconds = remaining / rate if rate > 0 else 0
-                    eta_minutes = eta_seconds / 60
+                    rate = pages_scanned / elapsed if elapsed > 0 else 0
                     print(
-                        f"Progress: {i+1}/{len(all_pages_to_delete)} "
-                        f"({deleted_count} deleted, {failed_count} failed) "
-                        f"- Rate: {rate:.1f} pages/sec - ETA: {eta_minutes:.1f} min"
+                        f"Scanned {pages_scanned} pages | Duplicates deleted: {deleted_count} | "
+                        f"Failures: {failed_count} | Rate: {rate:.1f} pages/sec"
                     )
 
-                # Reduced sleep times - only sleep after batches, not individual pages
-                if (i + 1) % batch_size == 0:
-                    batch_count += 1
-                    # Save checkpoint every batch
-                    import json
+                # Save checkpoint periodically
+                if pages_scanned % checkpoint_every_pages == 0:
+                    save_checkpoint(next_cursor)
 
-                    try:
-                        with open(checkpoint_file, "w") as f:
-                            json.dump({"processed_pages": list(processed_pages)}, f)
-                    except Exception as e:
-                        print(f"Warning: Could not save checkpoint: {e}")
-
-                    # Reduced delay from 5s to 1s between batches
-                    time.sleep(1)
-
-                # If a time budget is set, check it after each iteration
                 if deadline is not None and time.time() >= deadline:
                     early_exit = True
-                    print("Time budget reached. Saving checkpoint and exiting early.")
+                    print("Time budget reached during page processing. Saving checkpoint.")
+                    save_checkpoint(next_cursor)
                     break
 
-            except Exception as e:
-                failed_count += 1
-                print(f"Failed to delete page {page_info['page_id']}: {e}")
-                # Continue processing even if one fails
+            if early_exit:
+                break
+
+            # Optional small sleep for rate limit smoothing
+            if batch_delete_interval > 0:
+                time.sleep(batch_delete_interval)
+
+        if not early_exit:
+            # Completed scan of database
+            if os.path.exists(checkpoint_path):
+                os.remove(checkpoint_path)
+                print("Checkpoint removed (completed scan).")
 
         print(
-            f"\nDeletion completed! Successfully removed "
-            f"{deleted_count}/{len(all_pages_to_delete)} duplicate pages "
-            f"({failed_count} failed)."
+            f"Duplicate cleanup finished. Scanned {pages_scanned} pages. "
+            f"Deleted {deleted_count} duplicates (failed {failed_count})."
         )
-
-        # Clean up checkpoint file on successful completion only if we did not exit early
-        if not early_exit and os.path.exists(checkpoint_file):
-            os.remove(checkpoint_file)
-            print("Checkpoint file cleaned up.")
 
     def delete_duplicate_contacts_in_database(self, database_id, contacts_list):
         """Remove contacts that already exist in the database using batch fetch approach"""
