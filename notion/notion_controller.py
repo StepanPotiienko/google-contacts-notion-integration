@@ -254,7 +254,9 @@ class NotionController:
         while has_more:
             # Check deadline during fetch phase
             if deadline is not None and time.time() >= deadline:
-                print("Time budget reached during fetch phase. Exiting early without changes.")
+                print(
+                    "Time budget reached during fetch phase. Exiting early without changes."
+                )
                 return
 
             def query_page():
