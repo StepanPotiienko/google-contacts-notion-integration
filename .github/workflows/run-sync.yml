@@ -74,7 +74,7 @@ jobs:
 
       - name: Notion duplicate cleanup (timeboxed)
         env:
-          DEDUP_MAX_MINUTES: 50
+          DEDUP_MAX_MINUTES: 30
         run: |
           python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
 

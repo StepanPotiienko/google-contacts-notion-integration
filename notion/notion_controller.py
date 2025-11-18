@@ -222,6 +222,14 @@ class NotionController:
         """
         print(f"Checking for duplicates in database: {database_id}")
 
+        # Track timing from the start
+        start_time = time.time()
+        deadline = (
+            start_time + max_minutes * 60
+            if isinstance(max_minutes, int) and max_minutes > 0
+            else None
+        )
+
         # Load checkpoint if it exists
         checkpoint_file = "dedup_checkpoint.json"
         processed_pages = set()
@@ -244,6 +252,10 @@ class NotionController:
 
         print("Fetching all pages from database...")
         while has_more:
+            # Check deadline during fetch phase
+            if deadline is not None and time.time() >= deadline:
+                print("Time budget reached during fetch phase. Exiting early without changes.")
+                return
 
             def query_page():
                 params = {"database_id": database_id, "page_size": 100}
@@ -318,13 +330,7 @@ class NotionController:
         failed_count = 0
         batch_count = 0
 
-        # Progress tracking
-        start_time = time.time()
-        deadline = (
-            start_time + max_minutes * 60
-            if isinstance(max_minutes, int) and max_minutes > 0
-            else None
-        )
+        # Progress tracking (deadline already set at top of function)
         early_exit = False
 
         for i, page_info in enumerate(all_pages_to_delete):

@@ -100,15 +100,17 @@ def full_sync(service):
 
 
 def incremental_sync(service, token: str):
-    """Perform incremental sync with stored token."""
+    """Perform incremental sync with stored token. Returns True if changes were found."""
     print("Checking for changes...")
     try:
         results = _fetch_connections(service, sync_token=token)
+        changes_found = False
 
         if "connections" in results:
             print(f"Found {len(results['connections'])} changed contacts")
             for person in results["connections"]:
                 handle_person(person)
+            changes_found = True
 
         while "nextPageToken" in results:
             results = _fetch_connections(
@@ -119,6 +121,7 @@ def incremental_sync(service, token: str):
             if "connections" in results:
                 for person in results["connections"]:
                     handle_person(person)
+                changes_found = True
 
         new_token = results.get("nextSyncToken")
         if new_token and new_token != token:
@@ -127,12 +130,15 @@ def incremental_sync(service, token: str):
         else:
             print("Incremental sync complete. No token update needed.")
 
+        return changes_found
+
     except HttpError as e:
         if e.resp.status in (400, 410):  # invalid/expired sync token
             print("Sync token expired or invalid. Running full sync...")
             if os.path.exists(SYNC_TOKEN_FILE):
                 os.remove(SYNC_TOKEN_FILE)
             full_sync(service)
+            return True  # Full sync implies changes
         else:
             raise
 
@@ -200,26 +206,33 @@ def main():
         creds = get_credentials()
         service = build("people", "v1", credentials=creds)
 
+        changes_detected = False
+
         # Phase: Google contacts sync
         if args.phase in ("google-sync", "all"):
             token = update_sync_token()
             if token:
-                incremental_sync(service, token)
+                changes_detected = incremental_sync(service, token)
             else:
                 full_sync(service)
+                changes_detected = True
 
         # Small pause to be gentle with rate limits
         if args.phase == "all":
             time.sleep(2)
 
         # Phase: Notion duplicate cleanup (by Name in CRM DB)
+        # Skip if no changes detected during incremental sync
         if args.phase in ("dedup", "all") and os.environ.get("CRM_DATABASE_ID"):
-            notion_controller.notion_controller.delete_name_duplicates(
-                database_id=os.environ["CRM_DATABASE_ID"],
-                max_minutes=(
-                    args.dedup_max_minutes if args.dedup_max_minutes > 0 else None
-                ),
-            )
+            if args.phase == "all" and not changes_detected:
+                print("No Google changes detected. Skipping dedup phase.")
+            else:
+                notion_controller.notion_controller.delete_name_duplicates(
+                    database_id=os.environ["CRM_DATABASE_ID"],
+                    max_minutes=(
+                        args.dedup_max_minutes if args.dedup_max_minutes > 0 else None
+                    ),
+                )
 
         # Phase: contacts push into Notion
         if args.phase in ("contacts", "all"):
