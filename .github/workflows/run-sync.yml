@@ -5,12 +5,13 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  group: sync-${{ github.ref }}
+  group: notion-dedup
   cancel-in-progress: true
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     env:
       PYTHONPATH: ${{ github.workspace }}
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -74,7 +75,7 @@ jobs:
 
       - name: Notion duplicate cleanup (timeboxed)
         env:
-          DEDUP_MAX_MINUTES: 30
+          DEDUP_MAX_MINUTES: 20
         run: |
           python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
 
