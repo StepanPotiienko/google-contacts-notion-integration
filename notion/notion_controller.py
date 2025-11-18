@@ -5,7 +5,7 @@ import time
 import dotenv
 import httpx
 from notion_client import Client
-from notion_client.errors import RequestTimeoutError
+from notion_client.errors import RequestTimeoutError, APIResponseError
 
 dotenv.load_dotenv()
 
@@ -242,6 +242,7 @@ class NotionController:
         # Load checkpoint if exists
         if os.path.exists(checkpoint_path):
             import json
+
             try:
                 with open(checkpoint_path, "r", encoding="UTF-8") as f:
                     data = json.load(f)
@@ -257,6 +258,7 @@ class NotionController:
 
         def save_checkpoint(next_cursor):
             import json
+
             try:
                 with open(checkpoint_path, "w", encoding="UTF-8") as f:
                     json.dump(
@@ -293,7 +295,29 @@ class NotionController:
                     params["start_cursor"] = next_cursor
                 return self.notion_client.databases.query(**params)
 
-            response = self.notion_request_with_retry(query_page)
+            try:
+                response = self.notion_request_with_retry(query_page)
+            except APIResponseError as e:  # Handle invalid/expired cursor
+                msg = str(e)
+                if "start_cursor" in msg and "invalid" in msg:
+                    print(
+                        "Notion returned invalid start_cursor. Clearing checkpoint and restarting from beginning."
+                    )
+                    # Clear cursor and checkpoint, then retry from the beginning next loop
+                    next_cursor = None
+                    resume_cursor = None
+                    # Clear seen set to avoid misclassifying early canonical pages as duplicates
+                    seen_names = set()
+                    if os.path.exists(checkpoint_path):
+                        try:
+                            os.remove(checkpoint_path)
+                            print("Checkpoint removed due to invalid cursor.")
+                        except OSError as rem_err:
+                            print(f"Failed to remove checkpoint: {rem_err}")
+                    # Start next iteration which will query without start_cursor
+                    continue
+                # Re-raise if it's a different API error
+                raise
             results = response.get("results", [])  # type: ignore
             has_more = response.get("has_more", False)  # type: ignore
             next_cursor = response.get("next_cursor")  # type: ignore
@@ -302,14 +326,22 @@ class NotionController:
                 pages_scanned += 1
                 props = page.get("properties", {})
                 title_prop = props.get("Name", {}).get("title", [])
-                name = title_prop[0].get("plain_text", "Untitled") if title_prop else "Untitled"
+                name = (
+                    title_prop[0].get("plain_text", "Untitled")
+                    if title_prop
+                    else "Untitled"
+                )
                 page_id = page.get("id")
 
                 if name in seen_names:
                     # Duplicate: archive immediately
                     try:
+
                         def archive_page(pid=page_id):
-                            return self.notion_client.pages.update(page_id=pid, archived=True)
+                            return self.notion_client.pages.update(
+                                page_id=pid, archived=True
+                            )
+
                         self.notion_request_with_retry(archive_page)
                         deleted_count += 1
                     except Exception as e:  # noqa: BLE001
@@ -333,7 +365,9 @@ class NotionController:
 
                 if deadline is not None and time.time() >= deadline:
                     early_exit = True
-                    print("Time budget reached during page processing. Saving checkpoint.")
+                    print(
+                        "Time budget reached during page processing. Saving checkpoint."
+                    )
                     save_checkpoint(next_cursor)
                     break
 
