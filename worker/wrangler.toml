@@ -2,6 +2,7 @@ name = "google-contacts-notion-worker"
 main = "index.js"
 compatibility_date = "2025-12-22"
 workers_dev = true
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "public"

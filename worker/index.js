@@ -13,6 +13,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     console.log(`[${request.method}] ${url.pathname}`);
+    console.log(`Pathname matches: ${url.pathname === "/trigger"}, Method matches: ${request.method === "POST"}`);
     console.log(`Token present: ${!!env.GITHUB_TOKEN}`);
 
     if (request.method === "OPTIONS") {
@@ -63,9 +64,16 @@ export default {
           return new Response(message, { status: res.status, headers: corsHeaders });
         }
 
-        return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       } catch (err) {
-        return new Response(`Error: ${err}`, { status: 500, headers: corsHeaders });
+        console.error(`Worker error: ${err}`);
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     }
 
@@ -107,8 +115,16 @@ export default {
 
     // For everything else, let static assets serve if configured; otherwise 405
     if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      try {
+        const assetResponse = await env.ASSETS.fetch(request);
+        // If the asset was found (not 404), return it
+        if (assetResponse.status !== 404) {
+          return assetResponse;
+        }
+      } catch (err) {
+        console.error(`Assets fetch error: ${err}`);
+      }
     }
-    return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+    return new Response("Not Found", { status: 404, headers: corsHeaders });
   }
 };
