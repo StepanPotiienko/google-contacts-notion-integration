@@ -15,7 +15,7 @@
 		"binding": "ASSETS"
 	},
 	"vars": {
-		"DEFAULT_BRANCH": "main"
+		"DEFAULT_BRANCH": "main",
 	},
 	"observability": {
 		"enabled": true
