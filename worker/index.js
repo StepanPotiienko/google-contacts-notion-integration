@@ -21,7 +21,7 @@ export default {
     }
 
     // Handle API route explicitly to avoid assets catching POST on '/'
-    if (url.pathname === "/trigger" && request.method === "POST") {
+    if (url.pathname === "/" && request.method === "POST") {
       try {
         const defaultBranch = env.DEFAULT_BRANCH || 'main';
         const endpoint = `${GITHUB_API}/repos/https://github.com/StepanPotiienko/google-contacts-notion-integration/actions/workflows/${WORKFLOW_FILE}/dispatches`;
