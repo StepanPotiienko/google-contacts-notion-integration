@@ -4,6 +4,7 @@ import os
 import time
 import dotenv
 import httpx
+from typing import Optional
 from notion_client import Client
 from notion_client.errors import RequestTimeoutError, APIResponseError
 
@@ -23,32 +24,24 @@ class NotionController:
     def _create_client(self):
         """Create Notion client with proper timeout settings"""
         http_client = httpx.Client(timeout=httpx.Timeout(30.0))
-
         return Client(auth=NOTION_API_KEY, client=http_client)
 
     def notion_request_with_retry(self, func, max_retries=3, initial_delay=2):
         """Wrapper function to retry Notion API calls with exponential backoff"""
         last_exception = None
-
         for attempt in range(max_retries):
             try:
                 return func()
-            except (
-                RequestTimeoutError,
-                httpx.ReadTimeout,
-                httpx.ConnectTimeout,
-            ) as e:
+            except (RequestTimeoutError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
                 last_exception = e
                 if attempt == max_retries - 1:
                     break
-
-                delay = initial_delay * (2**attempt)  # Exponential backoff
+                delay = initial_delay * (2**attempt)
                 print(
                     f"Notion API request failed (attempt {attempt + 1}/{max_retries}): {e}"
                 )
                 print(f"Retrying in {delay} seconds...")
                 time.sleep(delay)
-
         print(f"All retries failed. Last error: {last_exception}")
         raise last_exception  # type: ignore
 
@@ -81,7 +74,7 @@ class NotionController:
         """Parse the name of the title property"""
 
         def retrieve_database():
-            return self.notion_client.databases.retrieve(database_id=database_id)
+            return self.notion_client.databases.retrieve(database_id=database_id)  # type: ignore
 
         try:
             db = self.notion_request_with_retry(retrieve_database)
@@ -213,7 +206,9 @@ class NotionController:
         ):
             return False
 
-    def delete_name_duplicates(self, database_id: str, max_minutes: int | None = None):
+    def delete_name_duplicates(
+        self, database_id: str, max_minutes: Optional[int] = None
+    ):
         """Stream through the database and archive duplicate pages as encountered.
 
         Efficient approach:
@@ -593,33 +588,27 @@ notion_controller = NotionController()
 
 
 def connect_to_notion_database():
-    """Global access function to connect to Notion database"""
     return notion_controller.connect_to_notion_database_and_return_tasks_list()
 
 
 def get_title_property_name(database_id):
-    """Global access function to get title property name"""
     return notion_controller.get_title_property_name(database_id)
 
 
 def debug_database_schema(database_id):
-    """Global access function to debug database schema"""
     notion_controller.debug_database_schema(database_id)
 
 
 def delete_duplicates_in_database(database_id, contacts_list):
-    """Global access function to delete duplicate contacts in database"""
     return notion_controller.delete_duplicate_contacts_in_database(
         database_id, contacts_list
     )
 
 
 def find_missing_tasks(contacts_list):
-    """Global access function to find missing tasks"""
     notion_controller.find_missing_tasks(contacts_list)
 
 
 def delete_duplicates():
-    """Global access function to delete duplicates from a database"""
     database_id = str(input("Enter database id: "))
     notion_controller.delete_name_duplicates(database_id=database_id)
