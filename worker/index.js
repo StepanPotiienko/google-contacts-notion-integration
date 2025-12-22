@@ -11,34 +11,35 @@ const corsHeaders = {
 
 export default {
   async fetch(request, env) {
-    console.log('Fetch event received'); // debug
+    const url = new URL(request.url);
+    console.log(`[${request.method}] ${url.pathname}`);
+    console.log(`Token present: ${!!env.GITHUB_TOKEN}`);
+
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
-
-    console.log(`Received ${request.method} request`); // debug
-    console.log(`Token present: ${!!env.GITHUB_TOKEN}`);
-
-    const url = new URL(request.url);
 
     // Handle API route explicitly to avoid assets catching POST on '/'
     if (url.pathname === "/trigger" && request.method === "POST") {
       try {
         const defaultBranch = env.DEFAULT_BRANCH || 'main';
-        const res = await fetch(
-          `${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/dispatches`,
-          {
-            method: 'POST',
-            headers: {
-              // GitHub REST API headers
-              'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-              'Accept': 'application/vnd.github+json',
-              'User-Agent': 'agropride-worker/1.0',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ ref: defaultBranch })
-          }
+        const endpoint = `${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
+
+        console.log(`Triggering workflow at: ${endpoint}`);
+        console.log(`Branch: ${defaultBranch}`);
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            // GitHub REST API headers
+            'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': 'agropride-worker/1.0',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ref: defaultBranch })
+        }
         );
 
         if (!res.ok) {
