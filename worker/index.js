@@ -24,7 +24,7 @@ export default {
     if (url.pathname === "/trigger" && request.method === "POST") {
       try {
         const defaultBranch = env.DEFAULT_BRANCH || 'main';
-        const endpoint = `${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
+        const endpoint = `${GITHUB_API}/repos/https://github.com/StepanPotiienko/google-contacts-notion-integration/actions/workflows/${WORKFLOW_FILE}/dispatches`;
 
         console.log(`Triggering workflow at: ${endpoint}`);
         console.log(`Branch: ${defaultBranch}`);

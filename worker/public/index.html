@@ -55,7 +55,7 @@
         }
       } else {
         const text = await response.text();
-        appendLog(`❌ GitHub API returned error (${response.status}): ${text}`);
+        appendLog(`❌ GitHub API returned error (${response.status}): ${text}, ${response.statusText}`);
       }
     } catch (err) {
       appendLog(`❌ Fetch failed: ${err}`);
