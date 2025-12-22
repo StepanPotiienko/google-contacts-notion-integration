@@ -8,5 +8,6 @@ __pycache__/
 sync_token.txt
 dedup_checkpoint.json
 clients.csv
+*.csv
 
 venv/
