@@ -326,7 +326,7 @@ NOTION_MAP_WIDGET_TEMPLATE = """<!DOCTYPE html>
 
 def fetch_clients_from_notion(api_key, database_id):
     """Fetch client location data from Notion database.
-    Returns a list of clients with name, lat, lng.
+    Returns a list of clients with name, lat, lng, and additional properties.
     """
     print("\n" + "=" * 60)
     print("🔍 Fetching data from Notion...")
@@ -344,6 +344,19 @@ def fetch_clients_from_notion(api_key, database_id):
             entries_processed += 1
             props = page.get("properties", {})
 
+            # Filter: Only include entries where Source = "БАЗА"
+            source_prop = props.get("Source") or props.get("source")
+            source_value = None
+            if source_prop:
+                if source_prop.get("type") == "select" and source_prop.get("select"):
+                    source_value = source_prop["select"].get("name", "")
+                elif source_prop.get("type") == "rich_text" and source_prop.get("rich_text"):
+                    source_value = source_prop["rich_text"][0]["plain_text"] if source_prop["rich_text"] else ""
+            
+            # Skip entries that don't have Source = "БАЗА"
+            if source_value != "БАЗА":
+                continue
+
             # Extract name
             name_prop = props.get("Name") or props.get("name")
             name = "Unnamed"
@@ -354,8 +367,47 @@ def fetch_clients_from_notion(api_key, database_id):
                     else "Unnamed"
                 )
 
+            # === Extract additional properties for popup ===
+            
+            # Phone number (Ukrainian field first as БАЗА entries use it)
+            phone = ""
+            phone_prop = props.get("ТЕЛЕФОН") or props.get("Phone")
+            if phone_prop and phone_prop.get("rich_text") and phone_prop["rich_text"]:
+                phone = phone_prop["rich_text"][0]["plain_text"]
+            
+            # Email
+            email = ""
+            email_prop = props.get("ЕЛ.АДРЕСА") or props.get("Email") or props.get("E-mail 1 - Value")
+            if email_prop:
+                if email_prop.get("type") == "email":
+                    email = email_prop.get("email") or ""
+                elif email_prop.get("type") == "rich_text" and email_prop.get("rich_text"):
+                    email = email_prop["rich_text"][0]["plain_text"] if email_prop["rich_text"] else ""
+            
+            # Contact person
+            contact = ""
+            contact_prop = props.get("КОНТАКТ")
+            if contact_prop and contact_prop.get("rich_text") and contact_prop["rich_text"]:
+                contact = contact_prop["rich_text"][0]["plain_text"]
+            
+            # Notes/Comments (Ukrainian field first as БАЗА entries use it)
+            notes = ""
+            notes_prop = props.get("ПРИМІТКА") or props.get("Notes")
+            if notes_prop and notes_prop.get("rich_text") and notes_prop["rich_text"]:
+                notes = notes_prop["rich_text"][0]["plain_text"]
+                # Truncate long notes
+                if len(notes) > 100:
+                    notes = notes[:100] + "..."
+            
+            # Organization title
+            org_title = ""
+            org_title_prop = props.get("Organization Title")
+            if org_title_prop and org_title_prop.get("select"):
+                org_title = org_title_prop["select"].get("name", "")
+
             # Extract label color
             label_color = "#ef4444"  # default red
+            label_name = ""
             labels_prop = props.get("Labels") or props.get("Label")
             if labels_prop:
                 if labels_prop.get("type") == "multi_select" and labels_prop.get(
@@ -364,6 +416,7 @@ def fetch_clients_from_notion(api_key, database_id):
                     # Get first label's color
                     first_label = labels_prop["multi_select"][0]
                     notion_color = first_label.get("color", "red")
+                    label_name = first_label.get("name", "")
                     # Map Notion colors to hex
                     color_map = {
                         "gray": "#6b7280",
@@ -380,6 +433,7 @@ def fetch_clients_from_notion(api_key, database_id):
                     label_color = color_map.get(notion_color, "#ef4444")
                 elif labels_prop.get("type") == "select" and labels_prop.get("select"):
                     notion_color = labels_prop["select"].get("color", "red")
+                    label_name = labels_prop["select"].get("name", "")
                     color_map = {
                         "gray": "#6b7280",
                         "brown": "#92400e",
@@ -396,22 +450,36 @@ def fetch_clients_from_notion(api_key, database_id):
 
             # Extract place - try multiple sources
             place = ""
+            address_display = ""  # For showing in popup
             latlng = None
 
-            # 1. Try the Place property (Notion location type)
-            place_prop = props.get("Place") or props.get("place")
-            if place_prop and place_prop.get("type") == "place":
-                location_value = place_prop.get("place")
-                if location_value:
-                    if "latitude" in location_value and "longitude" in location_value:
-                        latlng = (
-                            location_value["latitude"],
-                            location_value["longitude"],
-                        )
-                    elif "name" in location_value:
-                        place = location_value["name"]
+            # 1. Try the Адреса property (Ukrainian address field)
+            address_ua = props.get("Адреса")
+            if address_ua and address_ua.get("rich_text"):
+                place = (
+                    address_ua["rich_text"][0]["plain_text"]
+                    if address_ua["rich_text"]
+                    else ""
+                )
+                address_display = place
 
-            # 2. Try formatted address
+            # 2. Try the Place property (Notion location type)
+            if not latlng and not place:
+                place_prop = props.get("Place") or props.get("place")
+                if place_prop and place_prop.get("type") == "place":
+                    location_value = place_prop.get("place")
+                    if location_value:
+                        if "latitude" in location_value and "longitude" in location_value:
+                            latlng = (
+                                location_value["latitude"],
+                                location_value["longitude"],
+                            )
+                            address_display = location_value.get("name", "")
+                        elif "name" in location_value:
+                            place = location_value["name"]
+                            address_display = place
+
+            # 3. Try formatted address
             if not latlng and not place:
                 addr_formatted = props.get("Address 1 - Formatted")
                 if addr_formatted and addr_formatted.get("rich_text"):
@@ -420,6 +488,7 @@ def fetch_clients_from_notion(api_key, database_id):
                         if addr_formatted["rich_text"]
                         else ""
                     )
+                    address_display = place
 
             # 3. Build from components
             if not latlng and not place:
@@ -441,19 +510,28 @@ def fetch_clients_from_notion(api_key, database_id):
                             address_parts.append(txt)
                 if address_parts:
                     place = ", ".join(address_parts)
+                    address_display = place
+
+            # Build client data object with all properties
+            client_data = {
+                "name": name,
+                "color": label_color,
+                "phone": phone,
+                "email": email,
+                "contact": contact,
+                "address": address_display,
+                "notes": notes,
+                "label": label_name,
+                "orgTitle": org_title,
+            }
 
             # If we already have coordinates, use them
             if latlng:
                 entries_with_place += 1
                 entries_geocoded += 1
-                clients.append(
-                    {
-                        "name": name,
-                        "lat": latlng[0],
-                        "lng": latlng[1],
-                        "color": label_color,
-                    }
-                )
+                client_data["lat"] = latlng[0]
+                client_data["lng"] = latlng[1]
+                clients.append(client_data)
             # Otherwise, geocode the place string
             elif place:
                 entries_with_place += 1
@@ -465,36 +543,21 @@ def fetch_clients_from_notion(api_key, database_id):
                         lng = float(parts[1].strip())
                         if -90 <= lat <= 90 and -180 <= lng <= 180:
                             entries_geocoded += 1
-                            clients.append(
-                                {
-                                    "name": name,
-                                    "lat": lat,
-                                    "lng": lng,
-                                    "color": label_color,
-                                }
-                            )
+                            client_data["lat"] = lat
+                            client_data["lng"] = lng
+                            clients.append(client_data)
                             continue
                     except (ValueError, IndexError):
                         pass
-                time.sleep(1)  # Rate limiting for geocoding
+                time.sleep(0.25)  # Rate limiting for geocoding (250ms)
                 coords = geocode_location(place)
                 if coords:
                     entries_geocoded += 1
-                    clients.append(
-                        {
-                            "name": name,
-                            "lat": coords["lat"],
-                            "lng": coords["lng"],
-                            "color": label_color,
-                        }
-                    )
-
-        print("=" * 60)
-        print("📊 SUMMARY:")
-        print(f"   Total entries: {entries_processed}")
-        print(f"   With Place filled: {entries_with_place}")
-        print(f"   Successfully geocoded: {entries_geocoded}")
-        print("=" * 60 + "\n")
+                    client_data["lat"] = coords["lat"]
+                    client_data["lng"] = coords["lng"]
+                    clients.append(client_data)
+                else:
+                    print(f"  ⚠️  Failed to geocode: {name} - {place}")
 
         return clients
 
@@ -540,18 +603,18 @@ NOTION_EMBED_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 # Inline map template using MapLibre GL JS (no Leaflet, no Notion iframe)
-INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
-<html lang=\"en\">
+INLINE_MAP_TEMPLATE = '''<!DOCTYPE html>
+<html lang="en">
 <head>
-    <meta charset=\"UTF-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Client Map</title>
-    <link href=\"https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css\" rel=\"stylesheet\" />
-    <script src=\"https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js\"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
     <style>
-        html, body { height: 100%; margin: 0; }
-        #map { position: fixed; inset: 0; }
-        .marker { 
+        html, body {{ height: 100%; margin: 0; }}
+        #map {{ position: fixed; inset: 0; }}
+        .marker {{ 
             width: 14px; 
             height: 14px; 
             border-radius: 50%; 
@@ -559,82 +622,368 @@ INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             cursor: pointer;
             transition: transform 0.2s;
-        }
-        .marker:hover {
+        }}
+        .marker:hover {{
             transform: scale(1.2);
-        }
-        .maplibregl-popup-content { 
+        }}
+        .maplibregl-popup {{
+            max-width: 320px !important;
+        }}
+        .maplibregl-popup-content {{ 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            font-size: 14px; 
+            font-size: 13px; 
             color: #111827; 
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }}
+        .maplibregl-popup-close-button {{
+            font-size: 18px;
+            padding: 8px 12px;
+            color: #6b7280;
+            right: 4px;
+            top: 4px;
+        }}
+        .maplibregl-popup-close-button:hover {{
+            background: transparent;
+            color: #111827;
+        }}
+        .popup-header {{
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }}
+        .popup-name {{
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 4px 0;
+            padding-right: 20px;
+        }}
+        .popup-label {{
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: white;
+        }}
+        .popup-body {{
             padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .maplibregl-popup-content strong {
-            display: block;
-            margin-bottom: 4px;
-        }
+        }}
+        .popup-row {{
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            gap: 8px;
+        }}
+        .popup-row:last-child {{
+            margin-bottom: 0;
+        }}
+        .popup-icon {{
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            color: #9ca3af;
+        }}
+        .popup-value {{
+            color: #374151;
+            word-break: break-word;
+        }}
+        .popup-value a {{
+            color: #2563eb;
+            text-decoration: none;
+        }}
+        .popup-value a:hover {{
+            text-decoration: underline;
+        }}
+        .popup-notes {{
+            font-size: 12px;
+            color: #6b7280;
+            font-style: italic;
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }}
+        .popup-coords {{
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e5e7eb;
+        }}
     </style>
 </head>
 <body>
-    <div id=\"map\"></div>
+    <div id="map"></div>
     <script>
         const clients = {clients_json};
+        
+        // SVG icons for popup
+        const icons = {{
+            phone: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>',
+            email: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+            address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+            contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+            org: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>'
+        }};
+        
+        function buildPopupHTML(c) {{
+            let html = '<div class="popup-header">';
+            html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
+            if (c.label) {{
+                html += '<span class="popup-label" style="background-color:' + c.color + '">' + escapeHtml(c.label) + '</span>';
+            }}
+            html += '</div>';
+            
+            html += '<div class="popup-body">';
+            
+            if (c.contact) {{
+                html += '<div class="popup-row">' + icons.contact + '<span class="popup-value">' + escapeHtml(c.contact) + '</span></div>';
+            }}
+            
+            if (c.phone) {{
+                const phoneClean = c.phone.replace(/[^+\\d]/g, '');
+                html += '<div class="popup-row">' + icons.phone + '<span class="popup-value"><a href="tel:' + phoneClean + '">' + escapeHtml(c.phone) + '</a></span></div>';
+            }}
+            
+            if (c.email) {{
+                html += '<div class="popup-row">' + icons.email + '<span class="popup-value"><a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + '</a></span></div>';
+            }}
+            
+            if (c.address) {{
+                html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
+            }}
+            
+            if (c.orgTitle) {{
+                html += '<div class="popup-row">' + icons.org + '<span class="popup-value">' + escapeHtml(c.orgTitle) + '</span></div>';
+            }}
+            
+            if (c.notes) {{
+                html += '<div class="popup-notes">' + escapeHtml(c.notes) + '</div>';
+            }}
+            
+            html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
+            html += '</div>';
+            
+            return html;
+        }}
+        
+        function escapeHtml(text) {{
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }}
 
-        const map = new maplibregl.Map({
+        const map = new maplibregl.Map({{
             container: 'map',
-            style: {
+            style: {{
                 version: 8,
-                sources: {
-                    osm: {
+                sources: {{
+                    osm: {{
                         type: 'raster',
-                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tiles: ['https://tile.openstreetmap.org/{{{{z}}}}/{{{{x}}}}/{{{{y}}}}.png'],
                         tileSize: 256,
                         attribution: '© OpenStreetMap contributors'
-                    }
-                },
-                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-            },
+                    }}
+                }},
+                layers: [{{ id: 'osm', type: 'raster', source: 'osm' }}]
+            }},
             center: [30.5241361, 50.4500336],
             zoom: 5
-        });
+        }});
 
-        map.on('load', () => {
+        map.on('load', () => {{
             if (clients.length === 0) return;
             const bounds = new maplibregl.LngLatBounds();
             clients.forEach(c => bounds.extend([c.lng, c.lat]));
-            map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+            map.fitBounds(bounds, {{ padding: 50, maxZoom: 12 }});
 
-            clients.forEach(c => {
+            clients.forEach(c => {{
                 const el = document.createElement('div');
                 el.className = 'marker';
                 el.style.backgroundColor = c.color || '#ef4444';
                 
-                const popup = new maplibregl.Popup({ offset: 15 })
-                    .setHTML(`<div class="popup"><strong>${c.name}</strong></div>`);
+                const popup = new maplibregl.Popup({{ offset: 15, maxWidth: '320px' }})
+                    .setHTML(buildPopupHTML(c));
                 
-                new maplibregl.Marker({ element: el })
+                new maplibregl.Marker({{ element: el }})
                     .setLngLat([c.lng, c.lat])
                     .setPopup(popup)
                     .addTo(map);
-            });
-        });
+            }});
+        }});
     </script>
 </body>
-</html>"""
+</html>'''
+
+
+def simplify_ukrainian_address(address):
+    """Simplify Ukrainian address format for better geocoding.
+    Converts abbreviations and removes unnecessary parts.
+    """
+    import re
+    
+    # Common Ukrainian abbreviations and their expansions/simplifications
+    # Order matters - more specific patterns first
+    replacements = [
+        # Building/apartment/office - remove these as they confuse geocoder
+        (r',?\s*буд\.?\s*№?\s*[\d\-А-Яа-яA-Za-z/]+', ''),  # Building number
+        (r',?\s*кв\.?\s*№?\s*\d+', ''),  # Apartment number
+        (r',?\s*оф\.?\s*№?\s*\d+', ''),  # Office number
+        (r',?\s*б\.\s*\d+', ''),  # Building abbreviation with number
+        # Oblast abbreviations
+        (r'\s+обл\.?,?\s*', ' область, '),
+        # Rayon (district) abbreviations  
+        (r'\s+р-н\.?,?\s*', ' район, '),
+        (r'\s+район\.?,?\s*', ' район, '),
+        # Settlement type abbreviations - keep them for better matching
+        (r'\bс\.\s*', 'село '),
+        (r'\bсмт\.?\s+', 'смт '),  # Urban-type settlement
+        (r'\bм\.\s+', ''),  # City - just remove the abbreviation
+        # Street abbreviations
+        (r'\bвул\.\s*', 'вулиця '),
+        (r'\bпров\.\s*', 'провулок '),
+        (r'\bпросп\.\s*', 'проспект '),
+        # Clean up
+        (r'\s+', ' '),  # Multiple spaces to single
+        (r',\s*,', ','),  # Double commas
+        (r'^\s*,\s*', ''),  # Leading comma
+        (r'\s*,\s*$', ''),  # Trailing comma
+    ]
+    
+    result = address
+    for pattern, replacement in replacements:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    
+    # Add Ukraine to improve geocoding accuracy
+    if 'україна' not in result.lower() and 'ukraine' not in result.lower():
+        result = result.strip() + ', Україна'
+    
+    return result.strip()
+
+
+def geocode_with_google(location):
+    """
+    Geocode a location using Google Geocoding API.
+    Requires GOOGLE_MAPS_API_KEY in environment.
+    
+    Returns dict with 'lat' and 'lng' or None if not found.
+    """
+    google_api_key = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    
+    if not google_api_key:
+        return None
+    
+    import urllib.parse
+    
+    try:
+        # Simplify address for better results
+        simplified = simplify_ukrainian_address(location)
+        encoded = urllib.parse.quote(simplified)
+        
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?address={encoded}&key={google_api_key}&region=ua&language=uk"
+        
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        
+        if data.get("status") == "OK" and data.get("results"):
+            result = data["results"][0]
+            location_data = result.get("geometry", {}).get("location", {})
+            
+            if "lat" in location_data and "lng" in location_data:
+                return {
+                    "lat": location_data["lat"],
+                    "lng": location_data["lng"]
+                }
+        
+        return None
+    except Exception as e:
+        print(f"  ⚠️  Google geocoding error: {e}")
+        return None
 
 
 def geocode_location(location):
-    """Convert location string to coordinates using OpenStreetMap Nominatim"""
+    """
+    Convert location string to coordinates using multiple geocoding services.
+    
+    Geocoding priority:
+    1. Manual mapping (ukraine_settlements.py) - fastest, most reliable for known places
+    2. Google Geocoding API (if GOOGLE_MAPS_API_KEY is set) - best Ukrainian coverage
+    3. OpenStreetMap Nominatim - free fallback
+    """
+    import urllib.parse
+    import time as time_module
+    
+    # === 1. Try manual mapping first (fastest, no API calls) ===
     try:
-        url = f"https://nominatim.openstreetmap.org/search?format=json&q={location}&limit=1"
-        headers = {"User-Agent": "ClientMapWidget/1.0"}
-        response = requests.get(url, headers=headers, timeout=10)
+        from ukraine_settlements import lookup_settlement
+        manual_coords = lookup_settlement(location)
+        if manual_coords:
+            print(f"  ✓ Found in manual mapping: {location[:40]}...")
+            return manual_coords
+    except ImportError:
+        pass  # Manual mapping not available
+    
+    # === 2. Try Google Geocoding API (best Ukrainian coverage) ===
+    google_coords = geocode_with_google(location)
+    if google_coords:
+        print(f"  ✓ Found via Google: {location[:40]}...")
+        return google_coords
+    
+    # === 3. Fall back to OpenStreetMap Nominatim ===
+    try:
+        simplified = simplify_ukrainian_address(location)
+        
+        # Try with simplified address
+        encoded = urllib.parse.quote(simplified)
+        url = f"https://nominatim.openstreetmap.org/search?format=json&q={encoded}&limit=1&countrycodes=ua"
+        headers = {"User-Agent": "AgroprideOS-ClientMapWidget/1.0 (agropride.os@gmail.com)"}
+        response = requests.get(url, headers=headers, timeout=15)
         data = response.json()
 
         if data and len(data) > 0:
+            print(f"  ✓ Found via OSM: {location[:40]}...")
             return {"lat": float(data[0]["lat"]), "lng": float(data[0]["lon"])}
+        
+        # If simplified address failed, try extracting just the settlement and oblast
+        import re
+        # Try to extract the main settlement name
+        parts = location.split(',')
+        if len(parts) >= 2:
+            # Try just the settlement + oblast
+            oblast_part = None
+            settlement_part = None
+            
+            for part in parts:
+                part = part.strip()
+                if 'обл' in part.lower():
+                    oblast_part = part.replace('обл.', 'область').replace('обл', 'область')
+                elif any(x in part.lower() for x in ['село', 'с.', 'смт', 'м.', 'місто']):
+                    settlement_part = part
+            
+            if settlement_part:
+                # Clean settlement name
+                settlement_clean = re.sub(r'^(с\.|село|смт\.?|м\.|місто)\s*', '', settlement_part, flags=re.IGNORECASE).strip()
+                if oblast_part:
+                    fallback_query = f"{settlement_clean}, {oblast_part}, Україна"
+                else:
+                    fallback_query = f"{settlement_clean}, Україна"
+                
+                time_module.sleep(0.5)  # Rate limiting
+                encoded = urllib.parse.quote(fallback_query)
+                url = f"https://nominatim.openstreetmap.org/search?format=json&q={encoded}&limit=1&countrycodes=ua"
+                response = requests.get(url, headers=headers, timeout=15)
+                data = response.json()
+                
+                if data and len(data) > 0:
+                    print(f"  ✓ Found via OSM (fallback): {location[:40]}...")
+                    return {"lat": float(data[0]["lat"]), "lng": float(data[0]["lon"])}
+        
         return None
     except Exception as e:
         print(f"  ❌ Geocoding error for '{location}': {e}")
@@ -975,4 +1324,4 @@ def serve_widget():
 
 if __name__ == "__main__":
     start_scheduler()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5001)

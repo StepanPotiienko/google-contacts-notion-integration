@@ -99,8 +99,41 @@ The widget uses an iframe to embed the Notion map view, ensuring:
 - `public/widget.html` - Generated widget output
 - `.env` - Environment configuration
 - `test_fetch.py` - Test script for Notion map fetching
+- `ukraine_settlements.py` - Manual mapping of Ukrainian settlements to coordinates
 
 ## Configuration
+
+### Geocoding Services
+
+The application uses a multi-tier geocoding approach for best Ukrainian address coverage:
+
+1. **Manual Mapping** (`ukraine_settlements.py`) - Fastest, most reliable for known places. Contains 400+ Ukrainian cities and villages with pre-defined coordinates.
+
+2. **Google Geocoding API** (optional but recommended) - Best coverage for Ukrainian addresses. Set `GOOGLE_MAPS_API_KEY` in your `.env` file.
+
+3. **OpenStreetMap Nominatim** - Free fallback service.
+
+#### Setting up Google Geocoding API
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a new project or select an existing one
+3. Enable the "Geocoding API"
+4. Create an API key
+5. Add to your `.env` file:
+   ```bash
+   GOOGLE_MAPS_API_KEY=your_api_key_here
+   ```
+
+#### Adding Custom Settlements
+
+If a location isn't being geocoded correctly, add it to `ukraine_settlements.py`:
+
+```python
+UKRAINE_SETTLEMENTS = {
+    # ... existing entries ...
+    "your settlement name": (latitude, longitude),
+}
+```
 
 ### Widget Modes
 
