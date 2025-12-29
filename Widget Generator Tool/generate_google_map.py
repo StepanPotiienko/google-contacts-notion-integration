@@ -2,9 +2,7 @@
 """Generate widget with Google Maps (similar to Notion's map view)"""
 
 import os
-import json
 from dotenv import load_dotenv
-from main import fetch_clients_from_notion
 
 load_dotenv()
 

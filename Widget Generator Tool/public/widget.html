@@ -1,83 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Client Map</title>
     <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
-    <style>
-        html, body { height: 100%; margin: 0; }
-        #map { position: fixed; inset: 0; }
-        .marker { 
-            width: 14px; 
-            height: 14px; 
-            border-radius: 50%; 
-            border: 3px solid white; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .marker:hover {
-            transform: scale(1.2);
-        }
-        .maplibregl-popup-content { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            font-size: 14px; 
-            color: #111827; 
-            padding: 12px 16px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .maplibregl-popup-content strong {
-            display: block;
-            margin-bottom: 4px;
-        }
-    </style>
+    <link rel="stylesheet" href="index.css" />
 </head>
+
 <body>
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Пошук..." autocomplete="on" />
+        <div id="search-results"></div>
+    </div>
     <div id="map"></div>
-    <script>
-        const clients = [{"name": "Гомилко Саня Электрик", "lat": 49.841952, "lng": 24.0315921, "color": "#16a34a"}, {"name": "Кожухарь Олександр", "lat": 50.4500336, "lng": 30.5241361, "color": "#9333ea"}];
-
-        const map = new maplibregl.Map({
-            container: 'map',
-            style: {
-                version: 8,
-                sources: {
-                    osm: {
-                        type: 'raster',
-                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                        tileSize: 256,
-                        attribution: '© OpenStreetMap contributors'
-                    }
-                },
-                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-            },
-            center: [30.5241361, 50.4500336],
-            zoom: 5
-        });
-
-        map.on('load', () => {
-            if (clients.length === 0) return;
-            const bounds = new maplibregl.LngLatBounds();
-            clients.forEach(c => bounds.extend([c.lng, c.lat]));
-            map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
-
-            clients.forEach(c => {
-                const el = document.createElement('div');
-                el.className = 'marker';
-                el.style.backgroundColor = c.color || '#ef4444';
-                
-                const popup = new maplibregl.Popup({ offset: 15 })
-                    .setHTML(`<div class="popup"><strong>${c.name}</strong></div>`);
-                
-                new maplibregl.Marker({ element: el })
-                    .setLngLat([c.lng, c.lat])
-                    .setPopup(popup)
-                    .addTo(map);
-            });
-        });
-    </script>
+    <script src="index.js"></script>
 </body>
+
 </html>
