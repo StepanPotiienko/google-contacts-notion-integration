@@ -6,7 +6,17 @@ import dotenv
 import httpx
 from typing import Optional
 from notion_client import Client
-from notion_client.errors import RequestTimeoutError, APIResponseError
+
+try:
+    from notion_client.errors import RequestTimeoutError, APIResponseError
+except Exception:  # Fallback for test stubs that don't expose errors submodule
+
+    class RequestTimeoutError(Exception):
+        pass
+
+    class APIResponseError(Exception):
+        pass
+
 
 dotenv.load_dotenv()
 

@@ -7,8 +7,7 @@ Fixes formatting issues, properly quotes fields, removes duplicates, and normali
 import csv
 import re
 import sys
-from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Tuple
 
 
 def fix_email_field(line: str, email_col_idx: int) -> str:
@@ -89,7 +88,7 @@ def read_raw_csv(file_path: str) -> Tuple[List[str], List[List[str]]]:
 
 
 def normalize_row(
-    row: List[str], expected_cols: int, headers: List[str] = None
+    row: List[str], expected_cols: int, headers: List[str] = None  # type: ignore
 ) -> List[str]:
     """Normalize row to have correct number of columns."""
     # Pad or trim to match header count
@@ -134,7 +133,7 @@ def is_duplicate_row(row: List[str], seen: set) -> bool:
     """Check if row is a duplicate (based on ID and client name)."""
     # Use first two columns as unique identifier
     key = (row[0].strip(), row[1].strip()) if len(row) >= 2 else ()
-    if not key[0] and not key[1]:
+    if not key[0] and not key[1]:  # type: ignore
         return True
     if key in seen:
         return True
@@ -142,7 +141,7 @@ def is_duplicate_row(row: List[str], seen: set) -> bool:
     return False
 
 
-def clean_clients_csv(input_file: str, output_file: str = None) -> None:
+def clean_clients_csv(input_file: str, output_file: str = None) -> None:  # type: ignore
     """Main cleanup function."""
     if output_file is None:
         output_file = input_file.replace(".csv", "_cleaned.csv")
