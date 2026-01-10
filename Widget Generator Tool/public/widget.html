@@ -7,16 +7,369 @@
     <title>Client Map</title>
     <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
-    <link rel="stylesheet" href="index.css" />
+    <style>
+        @font-face {
+            font-family: 'Rubik One Local';
+            src: url('Rubik_One.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            font-family: 'Rubik One Local', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #map {
+            position: fixed;
+            inset: 0;
+        }
+
+        /* Place markers inside the map container and keep them below MapLibre popups */
+        #markers-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* marker visuals */
+        .marker {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+            cursor: pointer;
+            transition: transform 0.18s, box-shadow 0.18s;
+            pointer-events: auto;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+
+        .marker.active {
+            z-index: 2;
+        }
+
+        /* Ensure MapLibre popups render above our custom markers */
+        .maplibregl-popup {
+            z-index: 10000 !important;
+        }
+
+        .marker:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+
+        .maplibregl-popup {
+            max-width: 320px !important;
+        }
+
+        /* Controls (search + count) */
+        #controls {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 10001;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(15, 23, 42, 0.04);
+            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        #controls input[type="search"] {
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid #e6eef8;
+            outline: none;
+            font-size: 14px;
+            min-width: 260px;
+            box-shadow: inset 0 1px 4px rgba(16, 24, 40, 0.03);
+            transition: box-shadow 0.15s, border-color 0.15s;
+        }
+
+        #controls input[type="search"]:focus {
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
+            border-color: rgba(37, 99, 235, 0.6);
+        }
+
+        #controls #count {
+            font-size: 13px;
+            color: #111827;
+            white-space: nowrap;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #eef2ff;
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+        }
+
+        .maplibregl-popup-content {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            color: #111827;
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .maplibregl-popup-close-button {
+            font-size: 18px;
+            padding: 8px 12px;
+            color: #6b7280;
+            right: 4px;
+            top: 4px;
+        }
+
+        .maplibregl-popup-close-button:hover {
+            background: transparent;
+            color: #111827;
+        }
+
+        .popup-header {
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }
+
+        .popup-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 4px 0;
+            padding-right: 20px;
+        }
+
+        .popup-label {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: white;
+        }
+
+        .popup-body {
+            padding: 12px 16px;
+        }
+
+        .popup-row {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+
+        .popup-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .popup-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            color: #9ca3af;
+        }
+
+        .popup-value {
+            color: #374151;
+            word-break: break-word;
+        }
+
+        .popup-value a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .popup-value a:hover {
+            text-decoration: underline;
+        }
+
+        .popup-notes {
+            font-size: 12px;
+            color: #6b7280;
+            font-style: italic;
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .popup-coords {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e5e7eb;
+        }
+    </style>
 </head>
 
 <body>
-    <div id="search-container">
-        <input type="text" id="search-input" placeholder="Пошук..." autocomplete="on" />
-        <div id="search-results"></div>
+    <div id="controls">
+        <input id="search" list="suggestions" type="search" placeholder="Search clients (name, address, contact)" />
+        <datalist id="suggestions"></datalist>
+        <div id="count">Total: 0</div>
     </div>
     <div id="map"></div>
-    <script src="index.js"></script>
+    <script>
+        const clients = [{ "name": "ТОВ Промисловий дизайн", "color": "#ef4444", "phone": "(067)5427221", "email": "prom_diz@ukr.net", "contact": "Колбунцов Олексій Павлович (дир)", "address": "Полтавська обл., м.Кременчук, вул.Київська, 64", "notes": "", "label": "", "orgTitle": "", "lat": 49.5477492, "lng": 34.5130138 }, { "name": "ТОВ Строїнецький сад", "color": "#ef4444", "phone": "(096)3122946", "email": "pavlbuh@ukr.net", "contact": "Майданевич Леонід Олександрович (дир)", "address": "Вінницька обл., Тиврівський р-н, с.Строїнці", "notes": "", "label": "", "orgTitle": "", "lat": 49.2320162, "lng": 28.467975 }, { "name": "СФГ Росинка", "color": "#ef4444", "phone": "(098)0007559", "email": "sfg_buhgalter2013@ukr.net", "contact": "Горбенко Володимир Григорович (дир)", "address": "Полтавська обл., Глобинський р-н, с.Заможне", "notes": "", "label": "", "orgTitle": "", "lat": 49.5477492, "lng": 34.5130138 }, { "name": "ТОВ Креатив пром інжиніринг", "color": "#ef4444", "phone": "(066)8336600", "email": "0975025100@ukr.net", "contact": "Андрієвський Юрій Вячеславович (дир)", "address": "Полтавська обл., м. Кременчук, вул. Бетонна, 19", "notes": "", "label": "", "orgTitle": "", "lat": 49.0928529, "lng": 33.4308188 }, { "name": "ТОВ Креатив-Агромаш", "color": "#ef4444", "phone": "(066)8336600", "email": "0975025100@ukr.net", "contact": "Андрієвський Юрій Вячеславович (дир)", "address": "Полтавська обл., м. Кременчук, вул. Бетонна, 19", "notes": "", "label": "", "orgTitle": "", "lat": 49.0928529, "lng": 33.4308188 }];
+
+        // SVG icons for popup
+        const icons = {
+            phone: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>',
+            email: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+            address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+            contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+        };
+
+        function buildPopupHTML(c) {
+            let html = '<div class="popup-header">';
+            html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
+            html += '</div>';
+
+            html += '<div class="popup-body">';
+
+            if (c.address) {
+                html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
+            }
+
+            html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
+            html += '</div>';
+
+            return html;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+            },
+            center: [30.5241361, 50.4500336],
+            zoom: 5
+        });
+
+        map.on('load', () => {
+            if (clients.length === 0) return;
+            const bounds = new maplibregl.LngLatBounds();
+            clients.forEach(c => bounds.extend([c.lng, c.lat]));
+            map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+
+            // Create markers container and append it inside the map element
+            const markersContainer = document.createElement('div');
+            markersContainer.id = 'markers-container';
+            map.getContainer().appendChild(markersContainer);
+
+            // Create marker elements
+            const markerElements = {};
+            clients.forEach(c => {
+                const el = document.createElement('div');
+                el.className = 'marker';
+                el.style.backgroundColor = c.color || '#ef4444';
+
+                const popup = new maplibregl.Popup({ offset: 15, maxWidth: '320px' })
+                    .setHTML(buildPopupHTML(c));
+
+                el.addEventListener('click', () => {
+                    // Close any other open popups and clear active classes
+                    Object.values(markerElements).forEach(m => {
+                        try { if (m.popup) m.popup.remove(); } catch (e) { }
+                        if (m.el) m.el.classList.remove('active');
+                    });
+
+                    // Mark this marker active and open its popup
+                    el.classList.add('active');
+                    popup.setLngLat([c.lng, c.lat]).addTo(map);
+                });
+
+                popup.on('close', () => {
+                    el.classList.remove('active');
+                });
+
+                markersContainer.appendChild(el);
+                // Store searchable string and metadata for filtering/counting
+                const searchable = ((c.name || '') + ' ' + (c.address || '') + ' ' + (c.contact || '')).toLowerCase();
+                markerElements[c.name] = { el, lat: c.lat, lng: c.lng, popup, name: c.name, searchable };
+            });
+
+            // Setup search input, suggestions and count display
+            const searchInput = document.getElementById('search');
+            const suggestions = document.getElementById('suggestions');
+            const countNode = document.getElementById('count');
+
+            // Populate datalist suggestions with client names
+            Object.values(markerElements).forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.name || '';
+                suggestions.appendChild(opt);
+            });
+
+            function updateCount() {
+                const total = Object.keys(markerElements).length;
+                countNode.textContent = `Total: ${total}`;
+            }
+
+            // Initial count (total markers)
+            updateCount();
+
+            searchInput.addEventListener('input', () => {
+                const q = searchInput.value.trim().toLowerCase();
+                Object.values(markerElements).forEach(m => {
+                    const matches = q === '' || (m.searchable && m.searchable.indexOf(q) !== -1);
+                    if (!matches) {
+                        // hide marker and close popup if open
+                        try { if (m.popup) m.popup.remove(); } catch (e) { }
+                        m.el.style.display = 'none';
+                    } else {
+                        m.el.style.display = '';
+                    }
+                });
+            });
+
+            // Function to update marker positions
+            function updateMarkers() {
+                Object.values(markerElements).forEach(marker => {
+                    const screenPos = map.project([marker.lng, marker.lat]);
+                    marker.el.style.left = screenPos.x + 'px';
+                    marker.el.style.top = screenPos.y + 'px';
+                });
+            }
+
+            // Initial positioning
+            updateMarkers();
+
+            // Update on map movement
+            map.on('move', updateMarkers);
+            map.on('zoom', updateMarkers);
+        });
+    </script>
 </body>
 
 </html>
