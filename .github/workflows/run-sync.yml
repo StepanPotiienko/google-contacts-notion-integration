@@ -1,8 +1,12 @@
 name: "Run Google Contacts Notion Sync"
+
 on:
   schedule:
     - cron: "0 * * * *"
   workflow_dispatch: {}
+  # New trigger for Notion Button
+  issues:
+    types: [opened]
 
 concurrency:
   group: notion-dedup
@@ -10,6 +14,12 @@ concurrency:
 
 jobs:
   run-script:
+    # Only run if it's a schedule, manual trigger, OR an issue created by Notion
+    if: |
+      github.event_name != 'issues' || 
+      contains(github.event.issue.user.login, 'StepanPotiienko') ||
+      contains(github.event.issue.body, 'NotionAutomation')
+
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -28,9 +38,7 @@ jobs:
       - name: Restore sync_token.txt
         uses: actions/cache/restore@v4
         with:
-          # The script writes sync_token.txt at the repository root
           path: sync_token.txt
-          # Use a rolling key so we always restore the latest saved token
           key: sync-token-${{ github.run_number }}
           restore-keys: |
             sync-token-
@@ -38,9 +46,7 @@ jobs:
       - name: Restore deduplication checkpoint
         uses: actions/cache/restore@v4
         with:
-          # Cache the deduplication checkpoint to allow resuming across runs
           path: dedup_checkpoint.json
-          # Use rolling cache so each run can resume from the last
           key: dedup-checkpoint-${{ github.run_number }}
           restore-keys: |
             dedup-checkpoint-
@@ -88,3 +94,10 @@ jobs:
 
       - name: Push new contacts to Notion
         run: python google-contacts-integration/main.py --phase contacts
+
+      # Clean up the "Trigger Issue" if this was started by Notion
+      - name: Close Trigger Issue
+        if: github.event_name == 'issues'
+        run: gh issue close ${{ github.event.issue.number }} --comment "Sync completed via Notion button."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
