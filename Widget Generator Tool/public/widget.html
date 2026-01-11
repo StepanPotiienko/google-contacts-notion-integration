@@ -10,17 +10,17 @@
     <style>
         @font-face {
             font-family: 'Rubik One Local';
-            src: url('Rubik_One.ttf') format('truetype');
-            font-weight: normal;
+            src: url('Rubik.ttf') format('truetype');
             font-style: normal;
             font-display: swap;
         }
 
-        html,
-        body {
-            height: 100%;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
             font-family: 'Rubik One Local', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 400;
         }
 
         #map {
@@ -28,7 +28,6 @@
             inset: 0;
         }
 
-        /* Place markers inside the map container and keep them below MapLibre popups */
         #markers-container {
             position: absolute;
             inset: 0;
@@ -38,7 +37,6 @@
             z-index: 1;
         }
 
-        /* marker visuals */
         .marker {
             position: absolute;
             width: 18px;
@@ -57,7 +55,6 @@
             z-index: 2;
         }
 
-        /* Ensure MapLibre popups render above our custom markers */
         .maplibregl-popup {
             z-index: 10000 !important;
         }
@@ -70,7 +67,6 @@
             max-width: 320px !important;
         }
 
-        /* Controls (search + count) */
         #controls {
             position: absolute;
             top: 14px;
@@ -86,31 +82,81 @@
             align-items: center;
         }
 
-        #controls input[type="search"] {
-            padding: 8px 12px;
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            min-width: 260px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            width: 16px;
+            height: 16px;
+            color: #6b7280;
+            pointer-events: none;
+        }
+
+        #search {
+            width: 100%;
+            padding: 8px 36px 8px 34px;
             border-radius: 10px;
             border: 1px solid #e6eef8;
             outline: none;
             font-size: 14px;
-            min-width: 260px;
             box-shadow: inset 0 1px 4px rgba(16, 24, 40, 0.03);
             transition: box-shadow 0.15s, border-color 0.15s;
+            background: transparent;
         }
 
-        #controls input[type="search"]:focus {
+        #search:focus {
             box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
             border-color: rgba(37, 99, 235, 0.6);
         }
 
-        #controls #count {
-            font-size: 13px;
+        #clear-btn {
+            position: absolute;
+            right: 8px;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 4px;
+            display: none;
+        }
+
+        #clear-btn:hover {
+            color: #374151;
+        }
+
+        /* count removed per user request */
+
+        .suggestions {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e6eef8;
+            box-shadow: 0 6px 20px rgba(2, 6, 23, 0.12);
+            border-radius: 10px;
+            max-height: 220px;
+            overflow: auto;
+            z-index: 10002;
+            display: none;
+        }
+
+        .suggestion-item {
+            padding: 10px 12px;
+            font-size: 14px;
             color: #111827;
-            white-space: nowrap;
-            background: linear-gradient(180deg, #ffffff, #f8fafc);
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #eef2ff;
-            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+            cursor: pointer;
+        }
+
+        .suggestion-item:hover {
+            background: #f8fafc;
         }
 
         .maplibregl-popup-content {
@@ -218,9 +264,15 @@
 
 <body>
     <div id="controls">
-        <input id="search" list="suggestions" type="search" placeholder="Search clients (name, address, contact)" />
-        <datalist id="suggestions"></datalist>
-        <div id="count">Total: 0</div>
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input id="search" type="search" placeholder="Пошук..." autocomplete="off" />
+            <button id="clear-btn" aria-label="Clear search">×</button>
+            <div id="suggestions" class="suggestions" role="listbox"></div>
+        </div>
     </div>
     <div id="map"></div>
     <script>
@@ -319,38 +371,82 @@
                 markerElements[c.name] = { el, lat: c.lat, lng: c.lng, popup, name: c.name, searchable };
             });
 
-            // Setup search input, suggestions and count display
+            // Setup search input and suggestions box
             const searchInput = document.getElementById('search');
-            const suggestions = document.getElementById('suggestions');
-            const countNode = document.getElementById('count');
+            const suggestionsBox = document.getElementById('suggestions');
+            const clearBtn = document.getElementById('clear-btn');
 
-            // Populate datalist suggestions with client names
-            Object.values(markerElements).forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.name || '';
-                suggestions.appendChild(opt);
-            });
+            const markersList = Object.values(markerElements);
 
-            function updateCount() {
-                const total = Object.keys(markerElements).length;
-                countNode.textContent = `Total: ${total}`;
-            }
+            // count display removed
 
-            // Initial count (total markers)
-            updateCount();
-
-            searchInput.addEventListener('input', () => {
-                const q = searchInput.value.trim().toLowerCase();
-                Object.values(markerElements).forEach(m => {
-                    const matches = q === '' || (m.searchable && m.searchable.indexOf(q) !== -1);
+            function applyFilter(q) {
+                const qLower = (q || '').trim().toLowerCase();
+                markersList.forEach(m => {
+                    const matches = qLower === '' || (m.searchable && m.searchable.indexOf(qLower) !== -1);
                     if (!matches) {
-                        // hide marker and close popup if open
                         try { if (m.popup) m.popup.remove(); } catch (e) { }
                         m.el.style.display = 'none';
                     } else {
                         m.el.style.display = '';
                     }
                 });
+            }
+
+            function centerAndOpen(m) {
+                try {
+                    map.flyTo({ center: [m.lng, m.lat], zoom: Math.max(map.getZoom(), 11) });
+                } catch (e) { }
+                // open popup by simulating click
+                try { m.el.click(); } catch (e) { }
+            }
+
+            function renderSuggestions(q) {
+                const qLower = (q || '').trim().toLowerCase();
+                suggestionsBox.innerHTML = '';
+                if (!qLower) { suggestionsBox.style.display = 'none'; return; }
+                const matches = markersList.filter(m => m.searchable && m.searchable.indexOf(qLower) !== -1).slice(0, 50);
+                if (matches.length === 0) { suggestionsBox.style.display = 'none'; return; }
+                matches.forEach(m => {
+                    const item = document.createElement('div');
+                    item.className = 'suggestion-item';
+                    item.textContent = m.name || '';
+                    item.addEventListener('click', () => {
+                        searchInput.value = m.name || '';
+                        suggestionsBox.style.display = 'none';
+                        applyFilter(m.name || '');
+                        centerAndOpen(m);
+                        clearBtn.style.display = 'block';
+                    });
+                    suggestionsBox.appendChild(item);
+                });
+                suggestionsBox.style.display = 'block';
+            }
+
+            searchInput.addEventListener('input', () => {
+                const q = searchInput.value || '';
+                if (q.trim().length > 0) {
+                    clearBtn.style.display = 'block';
+                    renderSuggestions(q);
+                } else {
+                    clearBtn.style.display = 'none';
+                    suggestionsBox.style.display = 'none';
+                }
+                applyFilter(q);
+            });
+
+            clearBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                clearBtn.style.display = 'none';
+                suggestionsBox.style.display = 'none';
+                applyFilter('');
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (ev) => {
+                if (!ev.composedPath().some(el => el === suggestionsBox || el === searchInput)) {
+                    suggestionsBox.style.display = 'none';
+                }
             });
 
             // Function to update marker positions
