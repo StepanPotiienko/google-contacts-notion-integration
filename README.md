@@ -27,7 +27,15 @@ AgroprideOS is an automation system that integrates Google Contacts, Gmail, Noti
 - Batch operations with progress tracking
 - Archive duplicate entries (reversible)
 
-### 4. **Docker Support**
+### 4. **Widget Generator Tool**
+
+- Generate embeddable interactive map widgets
+- Geocode settlements using multiple providers
+- Real-time map visualization with customer data
+- Web-based widget generator interface
+- Static HTML/CSS/JS widget for easy integration
+
+### 5. **Docker Support**
 
 - Containerized deployment for duplicate cleanup
 - Easy-to-use shell script for Docker operations
@@ -39,14 +47,30 @@ AgroprideOS is an automation system that integrates Google Contacts, Gmail, Noti
 AgroprideOS/
 ├── google-contacts-integration/    # Google Contacts sync module
 │   ├── main.py                     # Main sync logic
+│   ├── get_refresh_token.py        # OAuth token retrieval
+│   └── Dockerfile                  # Docker configuration
 ├── notion/                         # Notion CRM operations
 │   ├── excel_to_notion_db.py       # Import contacts from CSV/Excel
 │   ├── delete_duplicates.py        # Duplicate cleanup tool
+│   ├── cleanup_clients_csv.py      # CSV cleanup utility
 │   ├── notion_controller.py        # Notion API wrapper
-│   ├── Dockerfile                   # Docker configuration
+│   ├── Dockerfile                  # Docker configuration
 │   └── run_docker.sh               # Docker helper script
 ├── website/                        # Order tracking module
-│   ├── orders_from_website.py      # Gmail order monitoring
+│   └── orders_from_website.py      # Gmail order monitoring
+├── Widget Generator Tool/          # Interactive map widget generator
+│   ├── main.py                     # Flask application server
+│   ├── geocode_settlements.py      # Settlement geocoding
+│   ├── generate_google_map.py      # Map generation logic
+│   ├── ukraine_settlements.py      # Settlement data
+│   ├── templates.py                # HTML templates
+│   ├── utils.py                    # Utility functions
+│   ├── public/                     # Static assets
+│   │   ├── widget.html             # Embeddable widget HTML
+│   │   ├── index.js                # Widget JavaScript
+│   │   ├── index.css               # Widget styles
+│   │   └── geocode_cache.json      # Geocoding cache
+│   └── requirements.txt            # Widget dependencies
 ├── requirements.txt                # Python dependencies
 └── run_duplicate_cleanup.py        # CLI for duplicate cleanup
 ```
@@ -109,7 +133,6 @@ AgroprideOS/
    ```
 
 4. **Configure Google Cloud Platform**
-
    - Enable Google Contacts API and Gmail API
    - Create OAuth 2.0 credentials
    - Download `credentials.json` to `google-contacts-integration/`
@@ -193,6 +216,30 @@ The cleanup tool will:
 - Archive older duplicate entries
 - Preserve the most recent contact information
 - Provide progress feedback
+
+### Generate Interactive Map Widgets
+
+Create embeddable map widgets from Notion customer data:
+
+```bash
+cd "Widget Generator Tool"
+python main.py
+```
+
+Then navigate to `http://localhost:5000` in your browser to:
+
+- Configure data sources from Notion
+- Select settlements/regions to visualize
+- Generate embeddable HTML widgets
+- Export as static widgets for your website
+
+Features:
+
+- Real-time geocoding of settlements
+- Interactive map visualization
+- Customer location mapping
+- Cached geocode data for performance
+- Responsive design for all devices
 
 ## 🔧 Configuration
 
@@ -312,4 +359,4 @@ This is a private project. For questions or suggestions, please contact the repo
 
 ---
 
-**Last Updated**: November 11, 2025
+**Last Updated**: January 24, 2026
