@@ -42,9 +42,6 @@ const map = new maplibregl.Map({
   zoom: 5
 });
 
-// Store markers for search functionality
-const markers = [];
-
 // Ensure clients are loaded; inject clients_array.js if needed
 function ensureClientsLoaded() {
   return new Promise(resolve => {
@@ -83,10 +80,6 @@ map.on('load', () => {
     });
   });
 });
-
-// Search functionality
-const searchInput = document.getElementById('search-input');
-const searchResults = document.getElementById('search-results');
 
 searchInput.addEventListener('input', (e) => {
   const query = e.target.value;
@@ -135,156 +128,6 @@ function displaySearchResults(results) {
   });
   searchResults.classList.add('active');
 }
-
-// Close search results when clicking outside
-document.addEventListener('mousedown', (e) => {
-  if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-    searchResults.classList.remove('active');
-  }
-});
-const icons = {
-  address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-  contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
-};
-
-function buildPopupHTML(c) {
-  let html = '<div class="popup-header">';
-  html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
-  html += '</div>';
-
-  html += '<div class="popup-body">';
-
-  if (c.address) {
-    html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-  }
-
-  html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
-  html += '</div>';
-
-  return html;
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-const map = new maplibregl.Map({
-  container: 'map',
-  style: {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        const icons = {
-          address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-          contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
-        };
-
-        function buildPopupHTML(c) {
-  let html = '<div class="popup-header">';
-  html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
-  html += '</div>';
-
-  html += '<div class="popup-body">';
-
-  if(c.address) {
-    html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-          }
-
-html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
-html += '</div>';
-
-return html;
-        }
-
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-const map = new maplibregl.Map({
-  container: 'map',
-  style: {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors'
-      }
-    },
-    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-  },
-  center: [30.5241361, 50.4500336],
-  zoom: 5
-});
-
-// Store markers for search functionality
-const markers = [];
-// Ensure clients are loaded; load clients_array.js if needed
-function ensureClientsLoaded() {
-  return new Promise(resolve => {
-    if (window.clients && Array.isArray(window.clients)) return resolve(window.clients);
-    const script = document.createElement('script');
-    script.src = 'clients_array.js';
-    script.onload = () => resolve(window.clients || []);
-    document.head.appendChild(script);
-  });
-}
-
-map.on('load', () => {
-  ensureClientsLoaded().then(clients => {
-    if (!clients || clients.length === 0) return;
-    const bounds = new maplibregl.LngLatBounds();
-    clients.forEach(c => bounds.extend([c.lng, c.lat]));
-    map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
-
-    clients.forEach(c => {
-      const el = document.createElement('div');
-      el.className = 'marker';
-      el.style.backgroundColor = c.color || '#ef4444';
-
-      const popup = new maplibregl.Popup({ offset: 15, maxWidth: '320px' })
-        .setHTML(buildPopupHTML(c));
-
-      const marker = new maplibregl.Marker({
-        element: el,
-        anchor: 'center'
-      })
-        .setLngLat([c.lng, c.lat])
-        .setPopup(popup)
-        .addTo(map);
-
-      // Store marker with client data for search
-      markers.push({ marker, client: c });
-    });
-  });
-});
-
-// Search functionality
-const searchInput = document.getElementById('search-input');
-const searchResults = document.getElementById('search-results');
-
-searchInput.addEventListener('input', (e) => {
-  const query = e.target.value;
-  if (query.trim() === '') {
-    searchResults.classList.remove('active');
-    return;
-  }
-
-  ensureClientsLoaded().then(() => {
-    const results = (window.clients && window.clients.length) ? searchClients(query) : [];
-    displaySearchResults(results);
-  });
-});
 
 // Close search results when clicking outside
 document.addEventListener('mousedown', (e) => {

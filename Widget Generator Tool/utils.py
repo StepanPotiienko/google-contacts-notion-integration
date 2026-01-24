@@ -5,19 +5,95 @@ This module contains all helper functions for fetching data from Notion,
 geocoding locations, and processing client information.
 """
 
+import csv
+import hashlib
+import io
+import json
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
+
 import requests
 from dotenv import load_dotenv
-import csv
-import json
-import io
-
 
 try:
     from notion_client import Client
 except ImportError:
     Client = None
+# Simple persistent cache for geocoding to avoid repeated external requests.
+# Stored in public/geocode_cache.json
+class _GeocodeCacheManager:
+    """Thread-safe geocode cache manager."""
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._cache = {}
+        return cls._instance
+    
+    def load(self) -> None:
+        path = _geocode_cache_path()
+        if not os.path.exists(path):
+            self._cache = {}
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                self._cache = json.load(fh)
+        except Exception:
+            self._cache = {}
+    
+    def save(self) -> None:
+        path = _geocode_cache_path()
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(self._cache, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+    
+    def get(self, key: str):
+        return self._cache.get(key)
+    
+    def set(self, key: str, value) -> None:
+        self._cache[key] = value
+    
+    def get_all(self) -> dict:
+        return self._cache
+
+
+_geocode_cache_manager = _GeocodeCacheManager()
+_GEOCODE_CACHE_LOCK = threading.Lock()
+
+
+def _geocode_cache_path() -> str:
+    public_dir = os.path.join(os.path.dirname(__file__), "public")
+    if not os.path.exists(public_dir):
+        try:
+            os.makedirs(public_dir, exist_ok=True)
+        except Exception:
+            pass
+    return os.path.join(public_dir, "geocode_cache.json")
+
+
+def _load_geocode_cache() -> None:
+    _geocode_cache_manager.load()
+
+
+def _save_geocode_cache() -> None:
+    _geocode_cache_manager.save()
+
+
+def _geocode_cache_key(q: str) -> str:
+    # Normalize query and return a short hash as key
+    if not isinstance(q, str):
+        q = str(q)
+    norm = " ".join(q.strip().lower().split())
+    return hashlib.sha1(norm.encode("utf-8")).hexdigest()
 
 
 def _load_env_with_exports():
@@ -43,43 +119,41 @@ def _load_env_with_exports():
                         os.environ.setdefault(key, val)
 
 
+# TODO: This function here is a bottleneck for the entire script.
+# It loads entire database from Notion, and thus taking too much time.
+# Then the entire data is filtered in the code, so we waste a lot of time and power
+# to just get the neccessary data.
 def fetch_notion_data(api_key, database_id):
-    """Fetch data from Notion database using the Notion API.
+    """Fetch Notion data that matches the server-side filter."""
+    notion_filter = {"property": "Source", "select": {"equals": "БАЗА"}}
 
-    Args:
-        api_key: Notion API key
-        database_id: Notion database ID
-
-    Returns:
-        dict: Notion API response containing database records
-    """
     if not Client:
-        # Fallback to direct HTTP request if notion_client is not available
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json",
         }
         url = f"https://api.notion.com/v1/databases/{database_id}/query"
-        response = requests.post(url, headers=headers, json={}, timeout=30)
+        # Pass the filter in the JSON body
+        response = requests.post(
+            url, headers=headers, json={"filter": notion_filter}, timeout=30
+        )
         response.raise_for_status()
         return response.json()
 
-    # Use notion_client library if available
     client = Client(auth=api_key)
     all_results = []
     start_cursor = None
 
-    while True:
-        params = {"database_id": database_id}
-        if start_cursor:
-            params["start_cursor"] = start_cursor
+    response = client.databases.query(
+        database_id=database_id, filter=notion_filter, start_cursor=start_cursor
+    )
 
-        response = client.databases.query(**params)
+    while response.get("has_more"):  # type: ignore
+        response = client.databases.query(
+            database_id=database_id, filter=notion_filter, start_cursor=start_cursor
+        )
         all_results.extend(response.get("results", []))  # type: ignore
-
-        if not response.get("has_more"):  # type: ignore
-            break
         start_cursor = response.get("next_cursor")  # type: ignore
 
     return {"results": all_results}
@@ -156,8 +230,182 @@ def geocode_location(location_str: str):
     return None
 
 
+def batch_geocode(
+    addresses: list[str],
+    max_workers: int = 4,
+    rate: float = 4.0,
+    burst: int = 4,
+    max_requests: Optional[int] = None,  # type: ignore
+    autosave_every: int = 20,
+) -> dict:
+    """
+    Batch geocode a list of address strings using `geocode_location` with a
+    small shared rate limiter. Returns a mapping address -> coords or None.
+    """
+    if not addresses:
+        return {}
+
+    # Ensure cache loaded
+    try:
+        _load_geocode_cache()
+    except Exception:
+        pass
+    # Deduplicate while preserving order and normalize keys
+    seen = set()
+    uniq = []
+    norm_map = {}
+    for a in addresses:
+        if not isinstance(a, str):
+            a = str(a)
+        norm = " ".join(a.strip().lower().split())
+        if norm in seen:
+            continue
+        seen.add(norm)
+        uniq.append(a)
+        norm_map[a] = norm
+
+    if max_requests is not None:
+        uniq = uniq[:max_requests]
+
+    results: dict = {}
+    to_query: list[str] = []
+    # Fill results from cache where available
+    for a in uniq:
+        key = _geocode_cache_key(a)
+        cached = _geocode_cache_manager.get(key)
+        if cached:
+            results[a] = cached
+        else:
+            to_query.append(a)
+            to_query.append(a)
+
+    if not to_query:
+        return results
+
+    # Thread-local requests.Session reuse
+    thread_local = threading.local()
+
+    def get_session():
+        if not hasattr(thread_local, "session"):
+            s = requests.Session()
+            s.headers.update({"User-Agent": "NotionMapWidget/1.0"})
+            thread_local.session = s
+        return thread_local.session
+
+    # Token-bucket rate limiter
+    bucket = {"tokens": float(burst), "last": time.time()}
+    bucket_lock = threading.Lock()
+
+    def acquire_token():
+        while True:
+            with bucket_lock:
+                now = time.time()
+                elapsed = now - bucket["last"]
+                # refill tokens
+                refill = elapsed * rate
+                if refill > 0:
+                    bucket["tokens"] = min(float(burst), bucket["tokens"] + refill)
+                    bucket["last"] = now
+                if bucket["tokens"] >= 1.0:
+                    bucket["tokens"] -= 1.0
+                    return
+            # sleep briefly before next check (non-busy wait)
+            time.sleep(max(0.01, 1.0 / (rate * 4)))
+
+    url = "https://nominatim.openstreetmap.org/search"
+    def worker(addr: str):
+        # double-check cache (in case another thread saved it)
+        key = _geocode_cache_key(addr)
+        cached = _geocode_cache_manager.get(key)
+        if cached:
+            return addr, cached
+
+        acquire_token()
+        session = get_session()
+        try:
+            params = {
+                "q": addr,
+                "format": "json",
+                "limit": 1,
+                "countrycodes": "ua",
+                "addressdetails": 1,
+            }
+            resp = session.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data and len(data) > 0:
+                r = data[0]
+                coords = {"lat": float(r["lat"]), "lng": float(r["lon"])}
+                return addr, coords
+        except Exception:
+            return addr, None
+        return addr, None
+        return addr, None
+
+    # Execute queries in thread pool
+    # success_count tracks number of successful geocodes we have persisted
+    success_count = 0
+    with ThreadPoolExecutor(max_workers=min(max_workers, max(1, len(to_query)))) as ex:
+        futures = {ex.submit(worker, a): a for a in to_query}
+        total = len(to_query)
+
+        # Use tqdm if available
+        try:
+            from tqdm import tqdm  # type: ignore
+
+            use_tqdm = True
+            bar = tqdm(total=total, desc="Geocoding", ncols=80)
+        except Exception:
+            use_tqdm = False
+            bar = None
+
+        completed = 0
+        try:
+            for fut in as_completed(futures):
+                a = futures[fut]
+                try:
+                    addr, coords = fut.result()
+                except Exception:
+                if coords:
+                    results[addr] = coords
+                    # Persist each successful result into the shared cache incrementally
+                    try:
+                        key = _geocode_cache_key(addr)
+                        with _GEOCODE_CACHE_LOCK:
+                            _geocode_cache_manager.set(key, coords)
+                            success_count += 1
+                            # Periodically flush to disk to avoid losing progress
+                            if autosave_every and success_count % autosave_every == 0:
+                                _save_geocode_cache()
+                    except Exception:
+                        pass
+                        pass
+                else:
+                    results[addr] = None
+                completed += 1
+                if use_tqdm and bar is not None:
+                    bar.update(1)
+                else:
+                    print(f"\nGeocoding: {completed}/{total}", end="\r", flush=True)
+        finally:
+            if use_tqdm and bar is not None:
+                bar.close()
+            else:
+                print()
+
+    # Ensure any remaining new entries are persisted
+    try:
+        with _GEOCODE_CACHE_LOCK:
+            _save_geocode_cache()
+    except Exception:
+        pass
+
+    # Include cached addresses results (already in results) and return
+    return results
+
+
 def parse_csv_to_clients(
-    file_bytes: bytes, geocode: bool = True, max_geocode: int | None = None
+    file_bytes: bytes, geocode: bool = True, max_geocode: Optional[int] = None
 ) -> list[dict]:
     """
     Parse a CSV file (bytes) into a list of client dicts suitable for the widget.
@@ -198,6 +446,11 @@ def parse_csv_to_clients(
 
     clients: list[dict] = []
     geocoded = 0
+
+    # Collect rows requiring geocoding and unique addresses
+    pending: list[tuple[dict, str]] = []
+    addr_seen: set = set()
+    addresses: list[str] = []
 
     for row in reader:
         # Normalize row keys to lowercase without surrounding spaces
@@ -269,22 +522,32 @@ def parse_csv_to_clients(
 
         # If we have an address and geocoding is allowed, try geocoding
         if address and geocode:
-            time.sleep(0.25)
-            coords = geocode_location(address)
-            if coords:
-                client["lat"] = coords["lat"]
-                client["lng"] = coords["lng"]
-                clients.append(client)
-                geocoded += 1
-                # optional early stop if many geocodes performed
-                if max_geocode and geocoded >= max_geocode:
-                    break
-                continue
-            else:
-                # Could not geocode; skip
-                continue
+            pending.append((client, address))
+            if address not in addr_seen:
+                addr_seen.add(address)
+                addresses.append(address)
+            continue
 
         # Nothing usable -> skip row
+    # Perform batch geocoding for collected addresses (respect max_geocode)
+    max_req = max_geocode if max_geocode is not None else None
+    if addresses:
+        t_bg = time.time()
+        coords_map = batch_geocode(
+            addresses, max_workers=4, rate=4.0, burst=4, max_requests=max_req
+        )
+        t_bg_end = time.time()
+        print(
+            f"⏱ CSV batch geocoding time: {t_bg_end - t_bg:.2f}s for {len(addresses)} places"
+        )
+        for client_obj, addr in pending:
+            coords = coords_map.get(addr)
+            if coords:
+                client_obj["lat"] = coords["lat"]
+                client_obj["lng"] = coords["lng"]
+                clients.append(client_obj)
+                geocoded += 1
+
     return clients
 
 
@@ -357,7 +620,7 @@ def merge_clients(
             e = str(e)
         return e.strip().lower()
 
-    def coord_key(c: dict) -> tuple | None:
+    def coord_key(c: dict) -> tuple | None:  # type: ignore
         lat = c.get("lat")
         lng = c.get("lng")
         try:
@@ -413,20 +676,30 @@ def fetch_clients_from_notion(api_key, database_id):
     """Fetch client location data from Notion database.
     Returns a list of clients with name, lat, lng, and additional properties.
     """
-    print("\n" + "=" * 60)
-    print("🔍 Fetching data from Notion...")
+
     clients = []
     entries_processed = 0
     entries_with_place = 0
     entries_geocoded = 0
 
     try:
+        print("Fetching data from Notion...")
         notion_data = fetch_notion_data(api_key, database_id)
         total_entries = len(notion_data.get("results", []))
-        print(f"✅ Found {total_entries} total entries in database")
+        print(f"Found {total_entries} total entries in database")
+
+        # Collect pages needing geocoding to batch later
+        pending_pages: list[tuple[dict, str, str]] = []  # (client_data, place, name)
 
         for page in notion_data.get("results", []):
             entries_processed += 1
+            # Print lightweight progress every 50 pages to avoid flooding
+            if entries_processed % 50 == 0:
+                print(
+                    f"Processing Notion pages: {entries_processed}/{total_entries}",
+                    end="\r",
+                    flush=True,
+                )
             props = page.get("properties", {})
 
             # Filter: Only include entries where Source = "БАЗА"
@@ -658,24 +931,164 @@ def fetch_clients_from_notion(api_key, database_id):
                             continue
                     except (ValueError, IndexError):
                         pass
-                time.sleep(0.25)  # Rate limiting for geocoding (250ms)
-                coords = geocode_location(place)
-                if coords:
-                    entries_geocoded += 1
-                    client_data["lat"] = coords["lat"]
-                    client_data["lng"] = coords["lng"]
-                    clients.append(client_data)
-                else:
-                    print(f"  ⚠️  Failed to geocode: {name} - {place}")
 
-        print("\n" + "=" * 60)
-        print("📊 Processing Summary:")
-        print(f"  Total entries in database: {total_entries}")
-        print(f"  Entries matching filter (Source=БАЗА): {entries_processed}")
-        print(f"  Entries with location data: {entries_with_place}")
-        print(f"  Successfully geocoded: {entries_geocoded}")
-        print(f"  Final client count: {len(clients)}")
-        print("=" * 60 + "\n")
+                # Defer geocoding for batch processing, include page id and edit time for change-detection
+                page_id = page.get("id")
+                page_edited = page.get("last_edited_time") or ""
+                pending_pages.append((client_data, place, name, page_id, page_edited))  # type: ignore
+
+        # Batch geocode collected places with page-level change-detection using last_edited_time
+        if pending_pages:
+            # Ensure cache loaded
+            try:
+                _load_geocode_cache()
+            except Exception:
+                pass
+
+            # Group pending pages by normalized place
+            place_map: dict = {}
+            for client_data, plc, name, page_id, page_edited in pending_pages:
+                norm = " ".join(plc.strip().lower().split())
+                if norm not in place_map:
+                    place_map[norm] = {"place": plc, "pages": []}
+                place_map[norm]["pages"].append(
+                    {
+                        "client": client_data,
+                        "page_id": page_id,
+                        "edited": page_edited,
+                        "name": name,
+                    }
+                )
+
+            # Decide which places actually need geocoding (if any page referencing them changed)
+            uniq_places: list[str] = []
+            needs_geocode_for_place: dict = {}
+
+            for norm, entry in place_map.items():
+                place = entry["place"]
+                pages = entry["pages"]
+                need_geo = False
+                for p in pages:
+                    pid = p.get("page_id")
+                    edited = p.get("edited") or ""
+                    page_key = f"page::{pid}" if pid else None
+
+                    page_cached = None
+                    if page_key:
+                        page_cached = _geocode_cache_manager.get(page_key)
+
+                    # If page-specific cache exists and timestamps match, use it
+                    if page_cached:
+                        # page_cached may be stored as {'coords': {...}, 'last_edited_time': ...}
+                        if isinstance(page_cached, dict) and page_cached.get("coords"):
+                            if page_cached.get("last_edited_time") == edited:
+                                coords = page_cached.get("coords")
+                                p["client"]["lat"] = coords["lat"]
+                                p["client"]["lng"] = coords["lng"]
+                                continue
+                        # If page cache is a raw coords dict, assume valid
+                        if isinstance(page_cached, dict) and page_cached.get("lat"):
+                            coords = page_cached
+                            p["client"]["lat"] = coords.get("lat")
+                            p["client"]["lng"] = coords.get("lng")
+                            continue
+
+                    # Fall back to address-keyed cache
+                    addr_key = _geocode_cache_key(place)
+                    addr_cached = _geocode_cache_manager.get(addr_key)
+                    addr_cached = _GEOCODE_CACHE.get(addr_key)
+                    if addr_cached:
+                        # address cache may be {'coords': {...}} or raw coords
+                        if isinstance(addr_cached, dict) and addr_cached.get("coords"):
+                            coords = addr_cached.get("coords")
+                        elif isinstance(addr_cached, dict) and addr_cached.get("lat"):
+                            coords = {
+                                "lat": addr_cached.get("lat"),
+                                "lng": addr_cached.get("lng"),
+                            }
+                        else:
+                            coords = None
+
+                        if coords:
+                            # assign to client and create page-specific cache entry for faster next runs
+                            p["client"]["lat"] = coords["lat"]
+                            try:
+                                pid = p.get("page_id")
+                                edited = p.get("edited") or ""
+                                if pid:
+                                    page_key = f"page::{pid}"
+                                    with _GEOCODE_CACHE_LOCK:
+                                        _geocode_cache_manager.set(page_key, {
+                                            "coords": coords,
+                                            "last_edited_time": edited,
+                                            "address": place,
+                                        })
+                            except Exception:
+                                pass
+                                pass
+                            continue
+
+                    # If we reached here, this page needs geocoding
+                    need_geo = True
+
+                if need_geo:
+                    uniq_places.append(place)
+                    needs_geocode_for_place[place] = entry["pages"]
+
+            t_geocode_start = time.time()
+            coords_map = (
+                {}
+                if not uniq_places
+                else batch_geocode(uniq_places, max_workers=4, rate=4.0, burst=4)
+            )
+            t_geocode_end = time.time()
+
+            print(
+                f"⏱ Batch geocoding time: {t_geocode_end - t_geocode_start:.2f}s for {len(uniq_places)} places"
+            )
+
+            # Assign returned coords to all pages referencing each place and persist page-level cache
+            for norm, entry in place_map.items():
+                place = entry["place"]
+                pages = entry["pages"]
+                coords = coords_map.get(place)
+                for p in pages:
+                    client_obj = p["client"]
+                    pid = p.get("page_id")
+                    edited = p.get("edited") or ""
+
+                    # If client already has lat/lng from cache above, keep it
+                    if client_obj.get("lat") and client_obj.get("lng"):
+                        clients.append(client_obj)
+                        continue
+
+                    # Otherwise, try to use coords from batch result
+                    if coords:
+                        entries_geocoded += 1
+                        client_obj["lat"] = coords["lat"]
+                        client_obj["lng"] = coords["lng"]
+                        # persist page-specific cache
+                        try:
+                            if pid:
+                                page_key = f"page::{pid}"
+                                with _GEOCODE_CACHE_LOCK:
+                                    _geocode_cache_manager.set(page_key, {
+                                        "coords": coords,
+                                        "last_edited_time": edited,
+                                        "address": place,
+                                    })
+                        except Exception:
+                            pass
+                            pass
+                    else:
+                        print(f"  ⚠️  Failed to geocode: {p.get('name')} - {place}")
+
+            # flush cache after processing
+            try:
+                with _GEOCODE_CACHE_LOCK:
+                    _save_geocode_cache()
+            except Exception:
+                pass
 
         return clients
 
