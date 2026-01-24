@@ -172,7 +172,6 @@ GENERATOR_HTML = """
             </div>
 
             <div class="form-group">
-                <label for="includeStored"><input type="checkbox" id="includeStored" checked> Include stored CSV clients</label>
             </div>
             
             <button type="submit" id="generateBtn">
@@ -182,15 +181,7 @@ GENERATOR_HTML = """
 
         <hr style="margin:30px 0; border:none; border-top:1px solid #e5e7eb;" />
 
-        <form id="uploadForm" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="csvFile">Upload CSV file (clients)</label>
-                <input type="file" id="csvFile" accept=".csv,text/csv" />
-            </div>
-            <button type="submit" id="uploadBtn">Upload CSV and Add to Map</button>
-        </form>
-
-        <div style="margin-top:12px; font-size:13px; color:#374151;">Currently stored clients: <span id="storedCount">—</span></div>
+        <!-- CSV upload and stored clients removed -->
 
         <div class="error" id="error"></div>
 
@@ -220,13 +211,11 @@ GENERATOR_HTML = """
             
             const apiKey = document.getElementById('apiKey').value;
             const databaseId = document.getElementById('databaseId').value;
-            const includeStored = document.getElementById('includeStored').checked;
-            
             try {
                 const response = await fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ apiKey, databaseId, includeStored })
+                    body: JSON.stringify({ apiKey, databaseId })
                 });
                 
                 const data = await response.json();
@@ -260,64 +249,7 @@ GENERATOR_HTML = """
             }, 2000);
         }
         
-        async function refreshStoredCount() {
-            try {
-                const r = await fetch('/api/clients');
-                const d = await r.json();
-                if (r.ok) {
-                    document.getElementById('storedCount').textContent = d.count;
-                }
-            } catch (err) {
-                // ignore
-            }
-        }
-
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('uploadBtn');
-            const error = document.getElementById('error');
-            const result = document.getElementById('result');
-
-            const fileInput = document.getElementById('csvFile');
-            if (!fileInput.files || fileInput.files.length === 0) {
-                error.textContent = 'Please choose a CSV file to upload.';
-                error.classList.add('show');
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>Uploading...';
-            error.classList.remove('show');
-            result.classList.remove('show');
-
-            try {
-                const form = new FormData();
-                form.append('file', fileInput.files[0]);
-
-                const response = await fetch('/api/upload-csv', {
-                    method: 'POST',
-                    body: form,
-                });
-
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to upload CSV');
-                }
-
-                document.getElementById('widgetCode').value = data.widget;
-                result.classList.add('show');
-                refreshStoredCount();
-            } catch (err) {
-                error.textContent = err.message;
-                error.classList.add('show');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Upload CSV and Add to Map';
-            }
-        });
-
-        // Initial load
-        refreshStoredCount();
+        // CSV/stored-client UI removed; no stored-count refresh needed.
         function openWidgetInTab() {
             const widgetCode = document.getElementById('widgetCode').value;
             // Create a temporary form to POST the widget HTML to /view-widget in a new tab/window.

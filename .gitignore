@@ -11,6 +11,7 @@ __pycache__/
 env/
 .env
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -27,6 +28,7 @@ static/
 worker/.DS_Store
 worker/
 clients_store.json
+sync_token.txt
 
 # Ignore large generated clients array used by widget
 Widget Generator Tool/public/clients_array.js

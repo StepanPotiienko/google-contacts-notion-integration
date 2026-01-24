@@ -1,13 +1,21 @@
 """Main logic of AgroprideOS"""
 
-import os
-import time
 import argparse
+import os
+import sys
+import time
+from pathlib import Path
+
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+# Ensure project root is on sys.path so package imports work when running script directly
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 import notion.notion_controller as notion_controller
 

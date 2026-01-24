@@ -4,24 +4,30 @@ Widget Generator Tool - Flask Application
 This Flask application generates embeddable map widgets from Notion databases.
 """
 
+import hashlib
 import json
 import os
 import re
+import time
 
 import requests
 
 # For some reason IntelliSense marks this as an error, but Flask application works fine.
 # pylint: disable=import-error
-from flask import Flask, jsonify, render_template_string, request, redirect, url_for  # type: ignore
+from flask import (
+    Flask,
+    jsonify,
+    redirect,  # type: ignore
+    render_template_string,
+    request,
+    url_for,
+)
 
 # Import templates and utilities
 from templates import GENERATOR_HTML, INLINE_MAP_TEMPLATE
 from utils import (
     _load_env_with_exports,
     fetch_clients_from_notion,
-    parse_csv_to_clients,
-    load_clients_store,
-    save_clients_store,
     merge_clients,
 )
 
@@ -46,24 +52,28 @@ def generate_widget():
     # Support both camelCase and snake_case
     api_key = data.get("api_key") or data.get("apiKey")
     database_id = data.get("database_id") or data.get("databaseId")
-    include_stored = data.get("include_stored")
-    if include_stored is None:
-        include_stored = data.get("includeStored")
-    if include_stored is None:
-        include_stored = True
+    # CSV/stored clients removed — only Notion clients are used now.
 
     if not api_key or not database_id:
         return jsonify({"error": "Missing API key or database ID"}), 400
 
     try:
         notion_clients = []
+        # Allow caller to opt-out of geocoding to speed up responses (default: False)
+        geocode_flag = data.get("geocode")
+        if geocode_flag is None:
+            # support camelCase
+            geocode_flag = (
+                data.get("geocode")
+                or data.get("doGeocode")
+                or data.get("geocodeEnabled")
+            )
+        geocode_flag = bool(geocode_flag)
+
         if api_key and database_id:
             notion_clients = fetch_clients_from_notion(api_key, database_id)
-
-        stored_clients = load_clients_store() if include_stored else []
-
-        # Merge stored (CSV) and Notion clients, deduplicating by name+coords
-        clients = merge_clients(stored_clients, notion_clients, dedupe=True)
+        # Use Notion clients only; dedupe within the set if necessary.
+        clients = merge_clients([], notion_clients, dedupe=True)
         clients_json = json.dumps(clients)
 
         # Prefer using the `public/widget.html` file as the authoritative template.
@@ -100,45 +110,20 @@ def generate_widget():
 
 @app.route("/api/upload-csv", methods=["POST"])
 def upload_csv():
-    """Accept a CSV file upload, parse it into clients, and return widget HTML."""
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded (field name 'file')"}), 400
-
-    uploaded = request.files["file"]
-    try:
-        content = uploaded.read()
-        new_clients = parse_csv_to_clients(content)
-
-        # Load existing stored clients, merge and deduplicate, then save
-        existing = load_clients_store()
-        merged = merge_clients(existing, new_clients, dedupe=True)
-        save_clients_store(merged)
-
-        clients_json = json.dumps(merged)
-        widget_html = INLINE_MAP_TEMPLATE.format(clients_json=clients_json)
-        return jsonify({"widget": widget_html, "clients": len(merged)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    """CSV upload endpoint removed."""
+    return jsonify({"error": "CSV upload is no longer supported"}), 410
 
 
 @app.route("/api/clients", methods=["GET"])
 def get_clients():
-    """Return the currently stored clients."""
-    try:
-        clients = load_clients_store()
-        return jsonify({"clients": clients, "count": len(clients)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    """Stored CSV clients removed."""
+    return jsonify({"error": "Stored CSV clients removed"}), 410
 
 
 @app.route("/api/clear-clients", methods=["POST"])
 def clear_clients():
-    """Clear the stored clients list."""
-    try:
-        save_clients_store([])
-        return jsonify({"cleared": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    """Stored CSV clients removed."""
+    return jsonify({"error": "Stored CSV clients removed"}), 410
 
 
 @app.route("/generate", methods=["POST"])
@@ -183,7 +168,6 @@ _WIDGET_TTL = 60 * 10  # 10 minutes
 
 
 def _store_widget(html: str) -> str:
-    import time, hashlib
 
     ts = str(time.time()).encode("utf-8")
     # Use a short hash to create compact ids
@@ -194,8 +178,6 @@ def _store_widget(html: str) -> str:
 
 
 def _get_widget(wid: str):
-    import time
-
     entry = _WIDGET_STORE.get(wid)
     if not entry:
         return None
@@ -204,10 +186,10 @@ def _get_widget(wid: str):
         try:
             del _WIDGET_STORE[wid]
         except KeyError:
-            pass
+            print("An error occurred while deleting _WIDGET_STORE[wid].")
         return None
     return html
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5001)
+    app.run(host="0.0.0.0", debug=True, port=5001)
