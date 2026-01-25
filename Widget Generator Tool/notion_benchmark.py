@@ -4,14 +4,15 @@ Reads `NOTION_API_KEY` and `NOTION_DATABASE_ID` from environment.
 Run: python3 "Widget Generator Tool/notion_benchmark.py"
 """
 
+import asyncio
 import os
 import time
-from utils import fetch_clients_from_notion, _load_env_with_exports
+
 from dotenv import load_dotenv
+from notion_utils import fetch_clients_from_notion
 
 # Load .env files: repo root (general) and local (supports `export ` lines)
 load_dotenv(os.path.join(os.getcwd(), ".env"))
-_load_env_with_exports()
 
 API_KEY = os.environ.get("NOTION_API_KEY")
 DB_ID = os.environ.get("NOTION_DATABASE_ID")
@@ -24,7 +25,7 @@ if not API_KEY or not DB_ID:
 
 print("Running Notion end-to-end benchmark...")
 start = time.time()
-clients = fetch_clients_from_notion(API_KEY, DB_ID)
+clients = asyncio.run(fetch_clients_from_notion(API_KEY, DB_ID))
 end = time.time()
 print(f"Fetched {len(clients)} clients in {end-start:.2f}s")
 

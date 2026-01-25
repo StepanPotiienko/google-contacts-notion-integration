@@ -2,21 +2,14 @@
 
 import os
 import time
+from typing import Optional
+import json
+
 import dotenv
 import httpx
-from typing import Optional
 from notion_client import Client
 
-try:
-    from notion_client.errors import RequestTimeoutError, APIResponseError
-except Exception:  # Fallback for test stubs that don't expose errors submodule
-
-    class RequestTimeoutError(Exception):
-        pass
-
-    class APIResponseError(Exception):
-        pass
-
+from notion_client.errors import APIResponseError, RequestTimeoutError
 
 dotenv.load_dotenv()
 
@@ -246,7 +239,6 @@ class NotionController:
 
         # Load checkpoint if exists
         if os.path.exists(checkpoint_path):
-            import json
 
             try:
                 with open(checkpoint_path, "r", encoding="UTF-8") as f:
@@ -256,14 +248,13 @@ class NotionController:
                     deleted_count = int(data.get("deleted_count", 0))
                     pages_scanned = int(data.get("pages_scanned", 0))
                     print(
-                        f"Resuming: {pages_scanned} pages scanned, {deleted_count} duplicates deleted."
+                        f"Resuming: {pages_scanned} pages scanned, \
+                        {deleted_count} duplicates deleted."
                     )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"Could not load checkpoint: {e}. Continuing without resume.")
 
         def save_checkpoint(next_cursor):
-            import json
-
             try:
                 with open(checkpoint_path, "w", encoding="UTF-8") as f:
                     json.dump(
@@ -306,7 +297,8 @@ class NotionController:
                 msg = str(e)
                 if "start_cursor" in msg and "invalid" in msg:
                     print(
-                        "Notion returned invalid start_cursor. Clearing checkpoint and restarting from beginning."
+                        "Notion returned invalid start_cursor. \
+                        Clearing checkpoint and restarting from beginning."
                     )
                     # Clear cursor and checkpoint, then retry from the beginning next loop
                     next_cursor = None
@@ -432,7 +424,8 @@ class NotionController:
                 duplicate_count += 1
                 if (i + 1) % 100 == 0 or (i + 1) == len(contacts_list):
                     print(
-                        f"Progress: {i+1}/{len(contacts_list)} checked, {duplicate_count} duplicates found"
+                        f"Progress: {i+1}/{len(contacts_list)} checked, \
+                            {duplicate_count} duplicates found"
                     )
 
         print(f"Removed {duplicate_count} duplicates")
@@ -577,7 +570,8 @@ class NotionController:
             # Show progress every 10 contacts
             if (i + 1) % 10 == 0 or (i + 1) == len(contacts_list):
                 print(
-                    f"Progress: {i+1}/{len(contacts_list)} ({success_count} created, {failed_count} failed)"
+                    f"Progress: {i+1}/{len(contacts_list)} \
+                        ({success_count} created, {failed_count} failed)"
                 )
 
             if self.create_contact_page(contact):

@@ -12,12 +12,13 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+import notion.notion_controller as notion_controller
+
 # Ensure project root is on sys.path so package imports work when running script directly
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-import notion.notion_controller as notion_controller
 
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
