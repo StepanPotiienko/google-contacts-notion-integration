@@ -5,6 +5,7 @@ Fixes formatting issues, properly quotes fields, removes duplicates, and normali
 """
 
 import csv
+import io
 import re
 import sys
 from typing import List, Tuple
@@ -26,7 +27,8 @@ def fix_email_field(line: str, email_col_idx: int) -> str:
         if len(parts) > email_col_idx + 1:
             next_field = parts[email_col_idx + 1]
 
-            # If the next field starts with a quote and contains an email, it's likely a split email field
+            # If the next field starts with a quote and contains
+            # an email, it's likely a split email field
             if next_field.strip().startswith('"') and re.search(
                 email_pattern, next_field
             ):
@@ -72,8 +74,6 @@ def read_raw_csv(file_path: str) -> Tuple[List[str], List[List[str]]]:
             fixed_lines.append(line)
 
     # Now parse the fixed CSV
-    import io
-
     csv_text = "".join(fixed_lines)
     f = io.StringIO(csv_text)
 
@@ -158,7 +158,7 @@ def clean_clients_csv(input_file: str, output_file: str = None) -> None:  # type
         try:
             normalized = normalize_row(row, len(headers), headers)
             normalized_rows.append(normalized)
-        except Exception as e:
+        except (ValueError, TypeError, IndexError, AttributeError) as e:
             print(f"Warning: Error normalizing row {i+2}: {e}")
 
     # Remove duplicates and invalid rows
@@ -196,18 +196,18 @@ def clean_clients_csv(input_file: str, output_file: str = None) -> None:  # type
     print(f"Total records: {len(cleaned_rows)}")
 
     # Show sample
-    print(f"\nFirst 3 rows:")
+    print("\nFirst 3 rows:")
     for i, row in enumerate(cleaned_rows[:3], 1):
         print(f"  Row {i}: {row[0]} | {row[1]}")
 
 
 if __name__ == "__main__":
-    input_path = "clients.csv"
-    output_path = "clients_cleaned.csv"
+    INPUT_PATH: str = "clients.csv"
+    OUTPUT_PATH: str = "clients_cleaned.csv"
 
     if len(sys.argv) > 1:
-        input_path = sys.argv[1]
+        INPUT_PATH = sys.argv[1]
     if len(sys.argv) > 2:
-        output_path = sys.argv[2]
+        OUTPUT_PATH = sys.argv[2]
 
-    clean_clients_csv(input_path, output_path)
+    clean_clients_csv(INPUT_PATH, OUTPUT_PATH)

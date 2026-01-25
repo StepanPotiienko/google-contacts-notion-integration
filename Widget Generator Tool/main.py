@@ -9,15 +9,12 @@ import json
 import os
 import re
 import time
-
+import asyncio
 import requests
-
-# For some reason IntelliSense marks this as an error, but Flask application works fine.
-# pylint: disable=import-error
 from flask import (
     Flask,
     jsonify,
-    redirect,  # type: ignore
+    redirect,
     render_template_string,
     request,
     url_for,
@@ -25,18 +22,12 @@ from flask import (
 
 # Import templates and utilities
 from templates import GENERATOR_HTML, INLINE_MAP_TEMPLATE
-from utils import (
-    _load_env_with_exports,
-    fetch_clients_from_notion,
-    merge_clients,
-)
+from utils import merge_clients
+from notion_utils import fetch_clients_from_notion
 
 # Initialize Flask app
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "public")
 app = Flask(__name__, static_folder=STATIC_DIR)
-
-# Load environment variables
-_load_env_with_exports()
 
 
 @app.route("/")
@@ -57,8 +48,9 @@ def generate_widget():
     if not api_key or not database_id:
         return jsonify({"error": "Missing API key or database ID"}), 400
 
+    notion_clients = []
+
     try:
-        notion_clients = []
         # Allow caller to opt-out of geocoding to speed up responses (default: False)
         geocode_flag = data.get("geocode")
         if geocode_flag is None:
@@ -71,7 +63,10 @@ def generate_widget():
         geocode_flag = bool(geocode_flag)
 
         if api_key and database_id:
-            notion_clients = fetch_clients_from_notion(api_key, database_id)
+            notion_clients = asyncio.run(
+                fetch_clients_from_notion(api_key, database_id)
+            )
+
         # Use Notion clients only; dedupe within the set if necessary.
         clients = merge_clients([], notion_clients, dedupe=True)
         clients_json = json.dumps(clients)
