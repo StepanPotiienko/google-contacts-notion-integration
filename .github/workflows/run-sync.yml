@@ -2,7 +2,13 @@ name: "Run Google Contacts Notion Sync"
 on:
   schedule:
     - cron: "0 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      resumeUrl:
+        description: "http://localhost:5678/rest/oauth2-credential/callback"
+        required: false
+        default: ""
+        type: string
   repository_dispatch:
     types: [notion-sync-trigger]
 
