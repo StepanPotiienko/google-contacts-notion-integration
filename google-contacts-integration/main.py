@@ -236,7 +236,7 @@ def main():
             if args.phase == "all" and not changes_detected:
                 print("No Google changes detected. Skipping dedup phase.")
             else:
-                notion_controller.notion_controller.delete_name_duplicates(
+                notion_controller.delete_name_duplicates(
                     database_id=os.environ["CRM_DATABASE_ID"],
                     max_minutes=(
                         args.dedup_max_minutes if args.dedup_max_minutes > 0 else None

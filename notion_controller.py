@@ -616,3 +616,9 @@ def find_missing_tasks(contacts_list):
 def delete_duplicates():
     database_id = str(input("Enter database id: "))
     notion_controller.delete_name_duplicates(database_id=database_id)
+
+
+def delete_name_duplicates(database_id: str, max_minutes: Optional[int] = None):
+    return notion_controller.delete_name_duplicates(
+        database_id=database_id, max_minutes=max_minutes
+    )
