@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
@@ -12,13 +13,12 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-import notion.notion_controller as notion_controller
+import notion_controller
 
-# Ensure project root is on sys.path so package imports work when running script directly
+
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
-
 
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
@@ -48,7 +48,7 @@ def get_credentials():
     return creds
 
 
-def update_sync_token(token: str | None = None) -> str | None:
+def update_sync_token(token: Optional[str] = None) -> Optional[str]:
     """Save sync token to file or retrieve existing one."""
     if token is not None:
         # Validate token before saving
@@ -154,8 +154,8 @@ def incremental_sync(service, token: str):
 
 def _fetch_connections(
     service,
-    sync_token: str | None = None,
-    page_token: str | None = None,
+    sync_token: Optional[str] = None,
+    page_token: Optional[str] = None,
     request_sync_token: bool = False,
 ):
     """Request Google People connections with correct params."""

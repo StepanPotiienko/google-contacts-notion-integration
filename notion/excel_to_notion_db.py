@@ -9,22 +9,26 @@ import sys
 import types
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import dotenv
+
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 if __package__ in (None, ""):
     project_root = Path(__file__).resolve().parent.parent
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     try:
-        import notion.notion_controller as notion_controller  # type: ignore
+        import notion_controller
     except ModuleNotFoundError as exc:
         print(f"Error: Failed to import notion_controller: {exc}")
         print("Please install required dependencies: pip install -r requirements.txt")
         sys.exit(1)
 else:
-    from . import notion_controller  # type: ignore
+    import notion_controller
 
 dotenv.load_dotenv()
 
@@ -163,7 +167,7 @@ def _extract_transactions(row: dict[str, str]) -> list[dict[str, str]]:
     return transactions
 
 
-def _parse_number(raw: str) -> float | None:
+def _parse_number(raw: str) -> Optional[float]:
     if not raw:
         return None
     cleaned = (
@@ -306,7 +310,7 @@ def _ensure_client_page(
     title_prop: str,
     entry: dict[str, Any],
     cache: dict[str, str],
-) -> tuple[str | None, bool]:
+) -> tuple[Optional[str], bool]:
     name = entry.get("name", "")
     if not name:
         return None, False
