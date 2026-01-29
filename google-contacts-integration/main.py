@@ -1,6 +1,7 @@
 """Main logic of AgroprideOS"""
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -23,6 +24,7 @@ if _PROJECT_ROOT not in sys.path:
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]
 SYNC_TOKEN_FILE = "sync_token.txt"
+CONTACTS_FILE = "contacts_to_sync.json"
 contacts_list: list[list[str]] = []
 
 
@@ -195,6 +197,31 @@ def get_contacts_list(person: dict):
     contacts_list.append([display_name, email, phone])
 
 
+def save_contacts_to_file():
+    """Save contacts_list to a JSON file for inter-process persistence."""
+    try:
+        with open(CONTACTS_FILE, "w", encoding="UTF-8") as f:
+            json.dump(contacts_list, f)
+        if contacts_list:
+            print(f"Saved {len(contacts_list)} contacts to {CONTACTS_FILE}")
+    except IOError as e:
+        print(f"Error saving contacts: {e}")
+
+
+def load_contacts_from_file() -> list[list[str]]:
+    """Load contacts from file if it exists."""
+    if os.path.exists(CONTACTS_FILE):
+        try:
+            with open(CONTACTS_FILE, "r", encoding="UTF-8") as f:
+                loaded = json.load(f)
+                if loaded:
+                    print(f"Loaded {len(loaded)} contacts from {CONTACTS_FILE}")
+                    return loaded
+        except IOError as e:
+            print(f"Error loading contacts: {e}")
+    return []
+
+
 def main():
     """Run the script"""
     parser = argparse.ArgumentParser(description="Google Contacts ↔ Notion sync")
@@ -226,6 +253,9 @@ def main():
                 full_sync(service)
                 changes_detected = True
 
+            # Save contacts to file for inter-process persistence
+            save_contacts_to_file()
+
         # Small pause to be gentle with rate limits
         if args.phase == "all":
             time.sleep(2)
@@ -245,11 +275,19 @@ def main():
 
         # Phase: contacts push into Notion
         if args.phase in ("contacts", "all"):
+            # Load contacts from file if running as separate phase
+            if args.phase == "contacts":
+                contacts_list.extend(load_contacts_from_file())
+
             contacts_to_create = notion_controller.delete_duplicates_in_database(
                 database_id=os.environ.get("CRM_DATABASE_ID", ""),
                 contacts_list=contacts_list,
             )
             notion_controller.find_missing_tasks(contacts_to_create)
+
+            # Clean up contacts file after processing
+            if os.path.exists(CONTACTS_FILE):
+                os.remove(CONTACTS_FILE)
 
     except Exception as e:
         print(f"Script failed with error: {e}")
