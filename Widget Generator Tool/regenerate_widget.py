@@ -4,6 +4,7 @@
 import os
 import json
 from dotenv import load_dotenv
+import asyncio
 from main import fetch_clients_from_notion
 
 # Load environment variables
@@ -19,17 +20,22 @@ def main():
         return
 
     # Fetch client location data from Notion
-    clients = fetch_clients_from_notion(api_key, database_id)
+    # fetch_clients_from_notion is async, so we need to run it in an event loop
+    clients = asyncio.run(fetch_clients_from_notion(api_key, database_id))
+
+    # Filter out clients without valid coordinates
+    clients = [c for c in clients if c.get("lat") is not None and c.get("lng") is not None]
 
     if not clients:
         print("⚠️  Warning: No clients with location data found")
 
     # Generate interactive map widget
     clients_json = json.dumps(clients, ensure_ascii=False)
-    
-    # Create the HTML with enhanced popup showing all client data
-    widget_html = f'''<!DOCTYPE html>
+
+    # Create the HTML with GeoJSON clustering
+    widget_html = f"""<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -37,32 +43,131 @@ def main():
     <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
     <style>
-        html, body {{ height: 100%; margin: 0; }}
-        #map {{ position: fixed; inset: 0; }}
-        .marker {{ 
-            width: 14px; 
-            height: 14px; 
-            border-radius: 50%; 
-            border: 3px solid white; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.2s;
+        @font-face {{
+            font-family: 'Rubik One Local';
+            src: url('Rubik.ttf') format('truetype');
+            font-style: normal;
+            font-display: swap;
         }}
-        .marker:hover {{
-            transform: scale(1.2);
+
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Rubik One Local', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 400;
         }}
+
+        #map {{
+            position: fixed;
+            inset: 0;
+        }}
+
         .maplibregl-popup {{
+            z-index: 10000 !important;
             max-width: 320px !important;
         }}
-        .maplibregl-popup-content {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            font-size: 13px; 
-            color: #111827; 
+
+        #controls {{
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 10001;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(15, 23, 42, 0.04);
+            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }}
+
+        .search-wrapper {{
+            position: relative;
+            display: flex;
+            align-items: center;
+            min-width: 260px;
+        }}
+
+        .search-icon {{
+            position: absolute;
+            left: 10px;
+            width: 16px;
+            height: 16px;
+            color: #6b7280;
+            pointer-events: none;
+        }}
+
+        #search {{
+            width: 100%;
+            padding: 8px 36px 8px 34px;
+            border-radius: 10px;
+            border: 1px solid #e6eef8;
+            outline: none;
+            font-size: 14px;
+            box-shadow: inset 0 1px 4px rgba(16, 24, 40, 0.03);
+            transition: box-shadow 0.15s, border-color 0.15s;
+            background: transparent;
+        }}
+
+        #search:focus {{
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
+            border-color: rgba(37, 99, 235, 0.6);
+        }}
+
+        #clear-btn {{
+            position: absolute;
+            right: 8px;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 4px;
+            display: none;
+        }}
+
+        #clear-btn:hover {{
+            color: #374151;
+        }}
+
+        .suggestions {{
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e6eef8;
+            box-shadow: 0 6px 20px rgba(2, 6, 23, 0.12);
+            border-radius: 10px;
+            max-height: 220px;
+            overflow: auto;
+            z-index: 10002;
+            display: none;
+        }}
+
+        .suggestion-item {{
+            padding: 10px 12px;
+            font-size: 14px;
+            color: #111827;
+            cursor: pointer;
+        }}
+
+        .suggestion-item:hover {{
+            background: #f8fafc;
+        }}
+
+        .maplibregl-popup-content {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            color: #111827;
             padding: 0;
             border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
             overflow: hidden;
         }}
+
         .maplibregl-popup-close-button {{
             font-size: 18px;
             padding: 8px 12px;
@@ -70,15 +175,18 @@ def main():
             right: 4px;
             top: 4px;
         }}
+
         .maplibregl-popup-close-button:hover {{
             background: transparent;
             color: #111827;
         }}
+
         .popup-header {{
             padding: 16px 16px 12px;
             border-bottom: 1px solid #e5e7eb;
             background: #f9fafb;
         }}
+
         .popup-name {{
             font-size: 15px;
             font-weight: 600;
@@ -86,6 +194,7 @@ def main():
             margin: 0 0 4px 0;
             padding-right: 20px;
         }}
+
         .popup-label {{
             display: inline-block;
             font-size: 11px;
@@ -94,18 +203,22 @@ def main():
             border-radius: 12px;
             color: white;
         }}
+
         .popup-body {{
             padding: 12px 16px;
         }}
+
         .popup-row {{
             display: flex;
             align-items: flex-start;
             margin-bottom: 8px;
             gap: 8px;
         }}
+
         .popup-row:last-child {{
             margin-bottom: 0;
         }}
+
         .popup-icon {{
             width: 16px;
             height: 16px;
@@ -113,17 +226,21 @@ def main():
             margin-top: 2px;
             color: #9ca3af;
         }}
+
         .popup-value {{
             color: #374151;
             word-break: break-word;
         }}
+
         .popup-value a {{
             color: #2563eb;
             text-decoration: none;
         }}
+
         .popup-value a:hover {{
             text-decoration: underline;
         }}
+
         .popup-notes {{
             font-size: 12px;
             color: #6b7280;
@@ -133,6 +250,7 @@ def main():
             border-radius: 6px;
             margin-top: 8px;
         }}
+
         .popup-coords {{
             font-size: 11px;
             color: #9ca3af;
@@ -142,53 +260,107 @@ def main():
         }}
     </style>
 </head>
+
 <body>
+    <div id="controls">
+        <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input id="search" type="search" placeholder="Пошук..." autocomplete="off" />
+            <button id="clear-btn" aria-label="Clear search">×</button>
+            <div id="suggestions" class="suggestions" role="listbox"></div>
+        </div>
+    </div>
     <div id="map"></div>
     <script>
         const clients = {clients_json};
-        
-        // SVG icons for popup
-        const icons = {{
-            phone: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>',
-            email: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
-            address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-            contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
-        }};
-        
-        function buildPopupHTML(c) {{
-            let html = '<div class="popup-header">';
-            html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
+
+        function clientsToGeoJSON(list) {{
+            return {{
+                type: 'FeatureCollection',
+                features: list
+                    .filter(function(c) {{ return c.lat != null && c.lng != null; }})
+                    .map(function(c, i) {{
+                        return {{
+                            type: 'Feature',
+                            geometry: {{
+                                type: 'Point',
+                                coordinates: [c.lng, c.lat]
+                            }},
+                            properties: {{
+                                _index: i,
+                                name: c.name || '',
+                                color: c.color || '#ef4444',
+                                phone: c.phone || '',
+                                email: c.email || '',
+                                contact: c.contact || '',
+                                address: c.address || '',
+                                notes: c.notes || '',
+                                label: c.label || '',
+                                orgTitle: c.orgTitle || ''
+                            }}
+                        }};
+                    }})
+            }};
+        }}
+
+        function buildPopupHTML(clientsAtLocation) {{
+            var html = '<div style="max-height:300px; overflow-y:auto;">';
+
+            clientsAtLocation.forEach(function(c, index) {{
+                html += '<div' + (index > 0 ? ' style="border-top: 1px solid #efefef; padding-top: 12px; margin-top: 12px;"' : '') + '>';
+
+                html += '<div class="popup-header">';
+                var headerText = clientsAtLocation.length > 1 ? '(' + (index + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
+                html += '<div class="popup-name" style="font-weight:600; font-size:14px; margin-bottom:4px;">' + headerText + '</div>';
+
+                if (c.label) {{
+                    html += '<div class="popup-label" style="background-color:' + (c.color || '#ef4444') + '; font-size:10px; padding:2px 6px; border-radius:4px; color:white; display:inline-block; margin-bottom:8px;">' + escapeHtml(c.label) + '</div>';
+                }}
+                html += '</div>';
+
+                html += '<div class="popup-body" style="font-size:13px; color:#374151;">';
+
+                if (c.address) {{
+                    html += '<div class="popup-row" style="display:flex; align-items:start; gap:6px; margin-bottom:4px;">' +
+                        '<span style="font-weight:500;">&#128205;</span> ' +
+                        '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
+                }}
+
+                if (c.notes) {{
+                    html += '<div class="popup-notes" style="background:#f3f4f6; padding:6px; border-radius:4px; margin-top:6px; font-style:italic; font-size:12px;">' + escapeHtml(c.notes) + '</div>';
+                }}
+
+                html += '</div>';
+                html += '</div>';
+            }});
+
             html += '</div>';
-            
-            html += '<div class="popup-body">';
-            
-            if (c.address) {{
-                html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-            }}
-            
-            html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
-            html += '</div>';
-            
             return html;
         }}
-        
+
         function escapeHtml(text) {{
             if (!text) return '';
-            const div = document.createElement('div');
+            var div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }}
 
-        const map = new maplibregl.Map({{
+        var fullGeoJSON = clientsToGeoJSON(clients);
+
+        var map = new maplibregl.Map({{
             container: 'map',
             style: {{
                 version: 8,
+                glyphs: 'https://fonts.openmaptiles.org/{{fontstack}}/{{range}}.pbf',
                 sources: {{
                     osm: {{
                         type: 'raster',
                         tiles: ['https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png'],
                         tileSize: 256,
-                        attribution: '© OpenStreetMap contributors'
+                        attribution: '&copy; OpenStreetMap contributors'
                     }}
                 }},
                 layers: [{{ id: 'osm', type: 'raster', source: 'osm' }}]
@@ -197,29 +369,304 @@ def main():
             zoom: 5
         }});
 
-        map.on('load', () => {{
+        map.on('load', function() {{
             if (clients.length === 0) return;
-            const bounds = new maplibregl.LngLatBounds();
-            clients.forEach(c => bounds.extend([c.lng, c.lat]));
-            map.fitBounds(bounds, {{ padding: 50, maxZoom: 12 }});
 
-            clients.forEach(c => {{
-                const el = document.createElement('div');
-                el.className = 'marker';
-                el.style.backgroundColor = c.color || '#ef4444';
-                
-                const popup = new maplibregl.Popup({{ offset: 15, maxWidth: '320px' }})
-                    .setHTML(buildPopupHTML(c));
-                
-                new maplibregl.Marker({{ element: el }})
-                    .setLngLat([c.lng, c.lat])
-                    .setPopup(popup)
+            // Add clustered GeoJSON source
+            map.addSource('clients', {{
+                type: 'geojson',
+                data: fullGeoJSON,
+                cluster: true,
+                clusterMaxZoom: 24,
+                clusterRadius: 50
+            }});
+
+            // Cluster circles — sized and colored by point count
+            map.addLayer({{
+                id: 'clusters',
+                type: 'circle',
+                source: 'clients',
+                filter: ['has', 'point_count'],
+                paint: {{
+                    'circle-color': [
+                        'step',
+                        ['get', 'point_count'],
+                        '#f87171',
+                        10, '#ef4444',
+                        30, '#dc2626',
+                        100, '#b91c1c'
+                    ],
+                    'circle-radius': [
+                        'step',
+                        ['get', 'point_count'],
+                        18,
+                        10, 24,
+                        30, 30,
+                        100, 36
+                    ],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff'
+                }}
+            }});
+
+            // Cluster count labels
+            map.addLayer({{
+                id: 'cluster-count',
+                type: 'symbol',
+                source: 'clients',
+                filter: ['has', 'point_count'],
+                layout: {{
+                    'text-field': ['get', 'point_count_abbreviated'],
+                    'text-font': ['Open Sans Bold'],
+                    'text-size': 13,
+                    'text-allow-overlap': true
+                }},
+                paint: {{
+                    'text-color': '#ffffff'
+                }}
+            }});
+
+            // Individual (unclustered) points
+            map.addLayer({{
+                id: 'unclustered-point',
+                type: 'circle',
+                source: 'clients',
+                filter: ['!', ['has', 'point_count']],
+                paint: {{
+                    'circle-color': '#ef4444',
+                    'circle-radius': 8,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff'
+                }}
+            }});
+
+            // Click on cluster: zoom in or show popup at max zoom
+            map.on('click', 'clusters', function(e) {{
+                var features = map.queryRenderedFeatures(e.point, {{ layers: ['clusters'] }});
+                if (!features.length) return;
+
+                var clusterId = features[0].properties.cluster_id;
+                var pointCount = features[0].properties.point_count;
+                var clusterCoords = features[0].geometry.coordinates;
+                var source = map.getSource('clients');
+
+                source.getClusterExpansionZoom(clusterId, function(err, expansionZoom) {{
+                    if (err) return;
+
+                    if (expansionZoom > 20 || expansionZoom <= map.getZoom()) {{
+                        // At max zoom — show all leaves in a popup
+                        source.getClusterLeaves(clusterId, Math.min(pointCount, 50), 0, function(err2, leaves) {{
+                            if (err2 || !leaves) return;
+
+                            var popupClients = leaves.map(function(leaf) {{
+                                return {{
+                                    name: leaf.properties.name,
+                                    color: leaf.properties.color,
+                                    phone: leaf.properties.phone,
+                                    email: leaf.properties.email,
+                                    contact: leaf.properties.contact,
+                                    address: leaf.properties.address,
+                                    notes: leaf.properties.notes,
+                                    label: leaf.properties.label,
+                                    orgTitle: leaf.properties.orgTitle
+                                }};
+                            }});
+
+                            new maplibregl.Popup({{ maxWidth: '360px' }})
+                                .setLngLat(clusterCoords)
+                                .setHTML(buildPopupHTML(popupClients))
+                                .addTo(map);
+                        }});
+                    }} else {{
+                        map.easeTo({{
+                            center: clusterCoords,
+                            zoom: expansionZoom
+                        }});
+                    }}
+                }});
+            }});
+
+            // Click on individual point: show popup
+            map.on('click', 'unclustered-point', function(e) {{
+                var feature = e.features[0];
+                var coords = feature.geometry.coordinates.slice();
+                var props = feature.properties;
+
+                // Find all clients at the exact same coordinate (co-located)
+                var colocated = clients.filter(function(c) {{
+                    return c.lat != null && c.lng != null &&
+                        c.lat.toFixed(6) === coords[1].toFixed(6) &&
+                        c.lng.toFixed(6) === coords[0].toFixed(6);
+                }});
+
+                var popupClients = colocated.length > 0 ? colocated : [{{
+                    name: props.name,
+                    color: props.color,
+                    phone: props.phone,
+                    email: props.email,
+                    contact: props.contact,
+                    address: props.address,
+                    notes: props.notes,
+                    label: props.label,
+                    orgTitle: props.orgTitle
+                }}];
+
+                // Handle antimeridian wrapping
+                while (Math.abs(e.lngLat.lng - coords[0]) > 180) {{
+                    coords[0] += e.lngLat.lng > coords[0] ? 360 : -360;
+                }}
+
+                new maplibregl.Popup({{ maxWidth: '320px' }})
+                    .setLngLat(coords)
+                    .setHTML(buildPopupHTML(popupClients))
                     .addTo(map);
             }});
+
+            // Cursor styling
+            map.on('mouseenter', 'clusters', function() {{
+                map.getCanvas().style.cursor = 'pointer';
+            }});
+            map.on('mouseleave', 'clusters', function() {{
+                map.getCanvas().style.cursor = '';
+            }});
+            map.on('mouseenter', 'unclustered-point', function() {{
+                map.getCanvas().style.cursor = 'pointer';
+            }});
+            map.on('mouseleave', 'unclustered-point', function() {{
+                map.getCanvas().style.cursor = '';
+            }});
+
+            // Fit bounds to show all markers
+            var bounds = new maplibregl.LngLatBounds();
+            clients.forEach(function(c) {{
+                if (c.lat != null && c.lng != null) {{
+                    bounds.extend([c.lng, c.lat]);
+                }}
+            }});
+            if (!bounds.isEmpty()) {{
+                map.fitBounds(bounds, {{ padding: 50, maxZoom: 12 }});
+            }}
+
+            // Search functionality
+            var searchInput = document.getElementById('search');
+            var searchInputWrapper = document.querySelector('.search-wrapper');
+            var suggestionsBox = document.getElementById('suggestions');
+            var clearBtn = document.getElementById('clear-btn');
+            var debounceTimer = null;
+
+            function filterMapByQuery(q) {{
+                var ql = (q || '').trim().toLowerCase();
+
+                if (!ql) {{
+                    map.getSource('clients').setData(fullGeoJSON);
+                    return;
+                }}
+
+                var matching = clients.filter(function(c) {{
+                    var text = [c.name, c.address, c.contact, c.phone, c.email]
+                        .filter(Boolean)
+                        .join(' ')
+                        .toLowerCase();
+                    return text.indexOf(ql) !== -1;
+                }});
+
+                map.getSource('clients').setData(clientsToGeoJSON(matching));
+            }}
+
+            function showSuggestions(q) {{
+                var ql = (q || '').trim().toLowerCase();
+                suggestionsBox.innerHTML = '';
+
+                if (!ql) {{
+                    suggestionsBox.style.display = 'none';
+                    return;
+                }}
+
+                var matches = clients.filter(function(c) {{
+                    var text = [c.name, c.address, c.contact, c.phone]
+                        .filter(Boolean)
+                        .join(' ')
+                        .toLowerCase();
+                    return text.indexOf(ql) !== -1;
+                }}).slice(0, 10);
+
+                if (matches.length === 0) {{
+                    suggestionsBox.style.display = 'none';
+                    return;
+                }}
+
+                matches.forEach(function(client) {{
+                    var div = document.createElement('div');
+                    div.className = 'suggestion-item';
+                    div.textContent = client.name + (client.address ? ' (' + client.address + ')' : '');
+
+                    div.addEventListener('click', function() {{
+                        // Reset filter to show all
+                        map.getSource('clients').setData(fullGeoJSON);
+
+                        // Fly to client
+                        map.flyTo({{
+                            center: [client.lng, client.lat],
+                            zoom: Math.max(map.getZoom(), 14),
+                            essential: true
+                        }});
+
+                        // Show popup after map finishes moving
+                        map.once('moveend', function() {{
+                            var colocated = clients.filter(function(c) {{
+                                return c.lat != null && c.lng != null &&
+                                    c.lat.toFixed(6) === client.lat.toFixed(6) &&
+                                    c.lng.toFixed(6) === client.lng.toFixed(6);
+                            }});
+
+                            new maplibregl.Popup({{ maxWidth: '320px' }})
+                                .setLngLat([client.lng, client.lat])
+                                .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [client]))
+                                .addTo(map);
+                        }});
+
+                        searchInput.value = client.name;
+                        suggestionsBox.style.display = 'none';
+                        clearBtn.style.display = 'block';
+                    }});
+
+                    suggestionsBox.appendChild(div);
+                }});
+
+                suggestionsBox.style.display = 'block';
+            }}
+
+            searchInput.addEventListener('input', function(e) {{
+                var val = e.target.value;
+                clearBtn.style.display = val ? 'block' : 'none';
+                showSuggestions(val);
+
+                // Debounce map filtering
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function() {{
+                    filterMapByQuery(val);
+                }}, 200);
+            }});
+
+            clearBtn.addEventListener('click', function() {{
+                searchInput.value = '';
+                filterMapByQuery('');
+                suggestionsBox.style.display = 'none';
+                clearBtn.style.display = 'none';
+            }});
+
+            document.addEventListener('click', function(e) {{
+                if (!searchInputWrapper.contains(e.target)) {{
+                    suggestionsBox.style.display = 'none';
+                }}
+            }});
+
         }});
+
     </script>
 </body>
-</html>'''
+
+</html>"""
 
     # Write to file
     output_path = os.path.join(os.path.dirname(__file__), "public", "widget.html")
