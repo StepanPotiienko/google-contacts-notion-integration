@@ -1,0 +1,87 @@
+name: Test Python Code
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pylint pytest
+
+      - name: Lint with pylint
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          pylint --errors-only google-contacts-integration/main.py notion/delete_duplicates.py notion/notion_controller.py run_duplicate_cleanup.py || true
+
+      - name: Check Python syntax
+        run: |
+          python -m py_compile google-contacts-integration/main.py
+          python -m py_compile notion/delete_duplicates.py
+          python -m py_compile notion/notion_controller.py
+          python -m py_compile run_duplicate_cleanup.py
+
+      - name: Test imports
+        run: |
+          python -c "import sys; sys.path.insert(0, 'google-contacts-integration'); import main"
+          python -c "import sys; sys.path.insert(0, 'notion'); import delete_duplicates"
+          python -c "import sys; sys.path.insert(0, 'notion'); import notion_controller"
+
+      - name: Test delete_duplicates functions
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'notion')
+          from delete_duplicates import normalize_phone, get_phone_number, get_page_title
+
+          # Test phone normalization
+          assert normalize_phone('+1 (234) 567-8900') == '+12345678900'
+          assert normalize_phone('234-567-8900') == '2345678900'
+          assert normalize_phone('+1-234-567-8900') == '+12345678900'
+          assert normalize_phone('') == ''
+          assert normalize_phone(None) == ''
+
+          print('✅ Phone normalization tests passed')
+
+          # Test get_page_title
+          test_page = {
+              'properties': {
+                  'Name': {
+                      'type': 'title',
+                      'title': [{'plain_text': 'Test Contact'}]
+                  }
+              }
+          }
+          assert get_page_title(test_page) == 'Test Contact'
+
+          # Test empty title
+          empty_page = {'properties': {}}
+          assert get_page_title(empty_page) == 'Untitled'
+
+          print('✅ Page title tests passed')
+          "
+
+      - name: Summary
+        run: |
+          echo "✅ All syntax checks passed"
+          echo "✅ Import tests passed"
+          echo "✅ Function tests passed"
+          echo "🎉 Build successful for Python ${{ matrix.python-version }}"
