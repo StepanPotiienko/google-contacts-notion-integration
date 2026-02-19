@@ -224,10 +224,46 @@ GENERATOR_HTML = """
                     throw new Error(data.error || 'Failed to generate widget');
                 }
                 
-                document.getElementById('widgetCode').value = data.widget;
+                // Store widget info for later use
+                window.currentWidgetId = data.widget_id;
+                window.currentPreviewUrl = data.preview_url;
+                
+                console.log('✓ Widget generated:', data);
+                console.log('  Fetching HTML from /api/widget/' + data.widget_id);
+                
+                // Fetch the actual HTML for display/copying
+                const widgetResponse = await fetch(`/api/widget/${data.widget_id}`);
+                
+                if (!widgetResponse.ok) {
+                    const widgetError = await widgetResponse.json();
+                    throw new Error(widgetError.error || `Failed to retrieve widget HTML (${widgetResponse.status})`);
+                }
+                
+                const widgetData = await widgetResponse.json();
+                
+                if (!widgetData.html) {
+                    throw new Error('Widget HTML is empty or undefined');
+                }
+                
+                document.getElementById('widgetCode').value = widgetData.html;
                 result.classList.add('show');
                 
+                // Update status message with widget info
+                const existingStatus = result.querySelector('.status-info');
+                if (existingStatus) existingStatus.remove();
+                
+                const statusMsg = document.createElement('div');
+                statusMsg.className = 'status-info';
+                statusMsg.style.cssText = 'margin-bottom: 15px; padding: 10px; background: #eff6ff; border-radius: 4px; font-size: 13px; color: #1e40af;';
+                statusMsg.innerHTML = `
+                    ✓ Generated widget for ${data.clients} clients (${data.size_mb} MB)<br>
+                    Widget ID: <code style="background: white; padding: 2px 6px; border-radius: 3px;">${data.widget_id}</code><br>
+                    HTML Size: ${widgetData.size_mb} MB
+                `;
+                result.insertBefore(statusMsg, result.firstChild);
+                
             } catch (err) {
+                console.error('Error:', err);
                 error.textContent = err.message;
                 error.classList.add('show');
             } finally {
@@ -251,23 +287,12 @@ GENERATOR_HTML = """
         
         // CSV/stored-client UI removed; no stored-count refresh needed.
         function openWidgetInTab() {
-            const widgetCode = document.getElementById('widgetCode').value;
-            // Create a temporary form to POST the widget HTML to /view-widget in a new tab/window.
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '/view-widget';
-            form.target = '_blank';
-            form.style.display = 'none';
-
-            const input = document.createElement('textarea');
-            input.name = 'html';
-            input.value = widgetCode;
-            form.appendChild(input);
-
-            document.body.appendChild(form);
-            form.submit();
-            // Clean up the form element after a short delay to ensure submission
-            setTimeout(() => document.body.removeChild(form), 1000);
+            // Use the stored preview URL to open widget directly (no POST needed!)
+            if (window.currentPreviewUrl) {
+                window.open(window.currentPreviewUrl, '_blank');
+            } else {
+                alert('Please generate a widget first');
+            }
         }
     </script>
 </body>
@@ -286,25 +311,14 @@ INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
     <style>
         html, body {{ height: 100%; margin: 0; }}
         #map {{ position: fixed; inset: 0; }}
-        .marker {{ 
-            width: 14px; 
-            height: 14px; 
-            border-radius: 50%; 
-            border: 3px solid white; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: transform 0.2s;
-        }}
-        .marker:hover {{
-            transform: scale(1.2);
-        }}
         .maplibregl-popup {{
+            z-index: 10000 !important;
             max-width: 320px !important;
         }}
-        .maplibregl-popup-content {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            font-size: 13px; 
-            color: #111827; 
+        .maplibregl-popup-content {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            color: #111827;
             padding: 0;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -353,13 +367,6 @@ INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
         .popup-row:last-child {{
             margin-bottom: 0;
         }}
-        .popup-icon {{
-            width: 16px;
-            height: 16px;
-            flex-shrink: 0;
-            margin-top: 2px;
-            color: #9ca3af;
-        }}
         .popup-value {{
             color: #374151;
             word-break: break-word;
@@ -380,87 +387,73 @@ INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
             border-radius: 6px;
             margin-top: 8px;
         }}
-        .popup-coords {{
-            font-size: 11px;
-            color: #9ca3af;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid #e5e7eb;
-        }}
     </style>
 </head>
 <body>
     <div id="map"></div>
     <script>
-        const clients = {clients_json};
-        
-        // SVG icons for popup
-        const icons = {{
-            phone: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>',
-            email: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
-            address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-            contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-            org: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>'
-        }};
-        
-        function buildPopupHTML(c) {{
-            let html = '<div class="popup-header">';
-            html += '<div class="popup-name">' + escapeHtml(c.name) + '</div>';
-            if (c.label) {{
-                html += '<span class="popup-label" style="background-color:' + c.color + '">' + escapeHtml(c.label) + '</span>';
-            }}
+        var clients = {clients_json};
+
+        function clientsToGeoJSON(list) {{
+            return {{
+                type: 'FeatureCollection',
+                features: list
+                    .filter(function(c) {{ return c.lat != null && c.lng != null; }})
+                    .map(function(c, i) {{
+                        return {{
+                            type: 'Feature',
+                            geometry: {{ type: 'Point', coordinates: [c.lng, c.lat] }},
+                            properties: {{
+                                name: c.name || '', color: c.color || '#ef4444',
+                                phone: c.phone || '', email: c.email || '',
+                                contact: c.contact || '', address: c.address || '',
+                                notes: c.notes || '', label: c.label || '',
+                                orgTitle: c.orgTitle || ''
+                            }}
+                        }};
+                    }})
+            }};
+        }}
+
+        function buildPopupHTML(clientsAtLocation) {{
+            var html = '<div style="max-height:300px; overflow-y:auto;">';
+            clientsAtLocation.forEach(function(c, index) {{
+                html += '<div' + (index > 0 ? ' style="border-top:1px solid #efefef;padding-top:12px;margin-top:12px;"' : '') + '>';
+                html += '<div class="popup-header">';
+                var headerText = clientsAtLocation.length > 1 ? '(' + (index+1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
+                html += '<div class="popup-name">' + headerText + '</div>';
+                if (c.label) {{
+                    html += '<span class="popup-label" style="background-color:' + (c.color || '#ef4444') + '">' + escapeHtml(c.label) + '</span>';
+                }}
+                html += '</div><div class="popup-body">';
+                if (c.address) {{ html += '<div class="popup-row">&#128205; <span class="popup-value">' + escapeHtml(c.address) + '</span></div>'; }}
+                if (c.notes) {{ html += '<div class="popup-notes">' + escapeHtml(c.notes) + '</div>'; }}
+                html += '</div></div>';
+            }});
             html += '</div>';
-            
-            html += '<div class="popup-body">';
-            
-            if (c.contact) {{
-                html += '<div class="popup-row">' + icons.contact + '<span class="popup-value">' + escapeHtml(c.contact) + '</span></div>';
-            }}
-            
-            if (c.phone) {{
-                const phoneClean = c.phone.replace(/[^+\\d]/g, '');
-                html += '<div class="popup-row">' + icons.phone + '<span class="popup-value"><a href="tel:' + phoneClean + '">' + escapeHtml(c.phone) + '</a></span></div>';
-            }}
-            
-            if (c.email) {{
-                html += '<div class="popup-row">' + icons.email + '<span class="popup-value"><a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + '</a></span></div>';
-            }}
-            
-            if (c.address) {{
-                html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-            }}
-            
-            if (c.orgTitle) {{
-                html += '<div class="popup-row">' + icons.org + '<span class="popup-value">' + escapeHtml(c.orgTitle) + '</span></div>';
-            }}
-            
-            if (c.notes) {{
-                html += '<div class="popup-notes">' + escapeHtml(c.notes) + '</div>';
-            }}
-            
-            html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
-            html += '</div>';
-            
             return html;
         }}
-        
+
         function escapeHtml(text) {{
             if (!text) return '';
-            const div = document.createElement('div');
+            var div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }}
 
-        const map = new maplibregl.Map({{
+        var fullGeoJSON = clientsToGeoJSON(clients);
+
+        var map = new maplibregl.Map({{
             container: 'map',
             style: {{
                 version: 8,
+                glyphs: 'https://fonts.openmaptiles.org/{{fontstack}}/{{range}}.pbf',
                 sources: {{
                     osm: {{
                         type: 'raster',
                         tiles: ['https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{{z}}/{{x}}/{{y}}.png'],
                         tileSize: 256,
-                        attribution: '© OpenStreetMap contributors, © CartoDB'
+                        attribution: '&copy; OpenStreetMap contributors, &copy; CartoDB'
                     }}
                 }},
                 layers: [{{ id: 'osm', type: 'raster', source: 'osm' }}]
@@ -469,25 +462,100 @@ INLINE_MAP_TEMPLATE = """<!DOCTYPE html>
             zoom: 5
         }});
 
-        map.on('load', () => {{
+        map.on('load', function() {{
             if (clients.length === 0) return;
-            const bounds = new maplibregl.LngLatBounds();
-            clients.forEach(c => bounds.extend([c.lng, c.lat]));
-            map.fitBounds(bounds, {{ padding: 50, maxZoom: 12 }});
 
-            clients.forEach(c => {{
-                const el = document.createElement('div');
-                el.className = 'marker';
-                el.style.backgroundColor = c.color || '#ef4444';
-                
-                const popup = new maplibregl.Popup({{ offset: 15, maxWidth: '320px' }})
-                    .setHTML(buildPopupHTML(c));
-                
-                new maplibregl.Marker({{ element: el }})
-                    .setLngLat([c.lng, c.lat])
-                    .setPopup(popup)
+            map.addSource('clients', {{
+                type: 'geojson',
+                data: fullGeoJSON,
+                cluster: true,
+                clusterMaxZoom: 24,
+                clusterRadius: 50
+            }});
+
+            map.addLayer({{
+                id: 'clusters', type: 'circle', source: 'clients',
+                filter: ['has', 'point_count'],
+                paint: {{
+                    'circle-color': ['step', ['get', 'point_count'], '#f87171', 10, '#ef4444', 30, '#dc2626', 100, '#b91c1c'],
+                    'circle-radius': ['step', ['get', 'point_count'], 18, 10, 24, 30, 30, 100, 36],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff'
+                }}
+            }});
+
+            map.addLayer({{
+                id: 'cluster-count', type: 'symbol', source: 'clients',
+                filter: ['has', 'point_count'],
+                layout: {{
+                    'text-field': ['get', 'point_count_abbreviated'],
+                    'text-font': ['Open Sans Bold'],
+                    'text-size': 13,
+                    'text-allow-overlap': true
+                }},
+                paint: {{ 'text-color': '#ffffff' }}
+            }});
+
+            map.addLayer({{
+                id: 'unclustered-point', type: 'circle', source: 'clients',
+                filter: ['!', ['has', 'point_count']],
+                paint: {{
+                    'circle-color': '#ef4444',
+                    'circle-radius': 8,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff'
+                }}
+            }});
+
+            map.on('click', 'clusters', function(e) {{
+                var features = map.queryRenderedFeatures(e.point, {{ layers: ['clusters'] }});
+                if (!features.length) return;
+                var clusterId = features[0].properties.cluster_id;
+                var pointCount = features[0].properties.point_count;
+                var clusterCoords = features[0].geometry.coordinates;
+                var source = map.getSource('clients');
+                source.getClusterExpansionZoom(clusterId, function(err, expansionZoom) {{
+                    if (err) return;
+                    if (expansionZoom > 20 || expansionZoom <= map.getZoom()) {{
+                        source.getClusterLeaves(clusterId, Math.min(pointCount, 50), 0, function(err2, leaves) {{
+                            if (err2 || !leaves) return;
+                            var popupClients = leaves.map(function(leaf) {{ return leaf.properties; }});
+                            new maplibregl.Popup({{ maxWidth: '360px' }})
+                                .setLngLat(clusterCoords)
+                                .setHTML(buildPopupHTML(popupClients))
+                                .addTo(map);
+                        }});
+                    }} else {{
+                        map.easeTo({{ center: clusterCoords, zoom: expansionZoom }});
+                    }}
+                }});
+            }});
+
+            map.on('click', 'unclustered-point', function(e) {{
+                var feature = e.features[0];
+                var coords = feature.geometry.coordinates.slice();
+                var colocated = clients.filter(function(c) {{
+                    return c.lat != null && c.lng != null &&
+                        c.lat.toFixed(6) === coords[1].toFixed(6) &&
+                        c.lng.toFixed(6) === coords[0].toFixed(6);
+                }});
+                var popupClients = colocated.length > 0 ? colocated : [feature.properties];
+                new maplibregl.Popup({{ maxWidth: '320px' }})
+                    .setLngLat(coords)
+                    .setHTML(buildPopupHTML(popupClients))
                     .addTo(map);
             }});
+
+            map.on('mouseenter', 'clusters', function() {{ map.getCanvas().style.cursor = 'pointer'; }});
+            map.on('mouseleave', 'clusters', function() {{ map.getCanvas().style.cursor = ''; }});
+            map.on('mouseenter', 'unclustered-point', function() {{ map.getCanvas().style.cursor = 'pointer'; }});
+            map.on('mouseleave', 'unclustered-point', function() {{ map.getCanvas().style.cursor = ''; }});
+
+            var bounds = new maplibregl.LngLatBounds();
+            clients.forEach(function(c) {{
+                if (c.lat != null && c.lng != null) bounds.extend([c.lng, c.lat]);
+            }});
+            if (!bounds.isEmpty()) map.fitBounds(bounds, {{ padding: 50, maxZoom: 12 }});
         }});
     </script>
 </body>

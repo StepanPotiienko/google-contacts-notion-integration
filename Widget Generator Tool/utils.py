@@ -18,8 +18,13 @@ from typing import Optional
 
 import requests
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+import asyncio
 
 from geocode_cache_manager import _GeocodeCacheManager
+
+load_dotenv()
 
 try:
     from notion_client import Client
@@ -62,27 +67,54 @@ async def fetch_notion_data(api_key, database_id):
             "Content-Type": "application/json",
         }
         url = f"https://api.notion.com/v1/databases/{database_id}/query"
-        # Pass the filter in the JSON body
-        response = requests.post(
-            url, headers=headers, json={"filter": notion_filter}, timeout=30
-        )
-        response.raise_for_status()
-        return response.json()
+
+        all_results = []
+        has_more = True
+        start_cursor = None
+
+        while has_more:
+            payload = {"filter": notion_filter}
+            if start_cursor:
+                payload["start_cursor"] = start_cursor
+
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            paged_results = data.get("results", [])
+            all_results.extend(paged_results)
+
+            has_more = data.get("has_more", False)
+            start_cursor = data.get("next_cursor")
+
+        return {"results": all_results}
 
     client = Client(auth=api_key)
     all_results: list = []
     start_cursor = None
 
-    response = await client.databases.query(
+    # The official notion_client can be async or sync depending on version.
+    # Call the query method and `await` only if it returns a coroutine.
+    resp = client.databases.query(
         database_id=database_id, filter=notion_filter, start_cursor=start_cursor
     )
+    if asyncio.iscoroutine(resp):
+        response = await resp
+    else:
+        response = resp
+
     all_results.extend(response.get("results", []))
     start_cursor = response.get("next_cursor")
 
     while response.get("has_more"):
-        response = await client.databases.query(
+        resp = client.databases.query(
             database_id=database_id, filter=notion_filter, start_cursor=start_cursor
         )
+        if asyncio.iscoroutine(resp):
+            response = await resp
+        else:
+            response = resp
+
         all_results.extend(response.get("results", []))
         start_cursor = response.get("next_cursor")
 
@@ -160,6 +192,50 @@ def geocode_location(location_str: str):
     return None
 
 
+def _parse_ukrainian_address(addr: str) -> dict:
+    """Parse Ukrainian address format into components (settlement, raion, oblast).
+
+    Handles formats like:
+    - "Полтавська обл., Лубенський р-н, с. Богодарівка"
+    - "м. Київ"
+    - "Харківська область, Харків"
+    """
+    parts = [p.strip() for p in addr.split(",")]
+    result = {"settlement": "", "raion": "", "oblast": ""}
+    other_parts = []
+
+    for part in parts:
+        p = part.strip()
+        if not p:
+            continue
+        p_lower = p.lower()
+
+        if "обл." in p_lower or "область" in p_lower:
+            cleaned = re.sub(r"\s*(обл\.?|область)\s*$", "", p, flags=re.IGNORECASE).strip()
+            result["oblast"] = cleaned
+        elif "р-н" in p_lower or ("район" in p_lower and "обл" not in p_lower):
+            cleaned = re.sub(r"\s*(р-н\.?|район)\s*$", "", p, flags=re.IGNORECASE).strip()
+            result["raion"] = cleaned
+        elif re.match(r"^с\.\s*", p):
+            result["settlement"] = re.sub(r"^с\.\s*", "", p).strip()
+        elif re.match(r"^село\s+", p, re.IGNORECASE):
+            result["settlement"] = re.sub(r"^село\s+", "", p, flags=re.IGNORECASE).strip()
+        elif re.match(r"^м\.\s*", p):
+            result["settlement"] = re.sub(r"^м\.\s*", "", p).strip()
+        elif re.match(r"^місто\s+", p, re.IGNORECASE):
+            result["settlement"] = re.sub(r"^місто\s+", "", p, flags=re.IGNORECASE).strip()
+        elif re.match(r"^смт\.?\s*", p):
+            result["settlement"] = re.sub(r"^смт\.?\s*", "", p).strip()
+        else:
+            other_parts.append(p)
+
+    # If no settlement found, use the last unclassified part (most specific)
+    if not result["settlement"] and other_parts:
+        result["settlement"] = other_parts.pop()
+
+    return result
+
+
 def batch_geocode(
     addresses: list[str],
     max_workers: int = 4,
@@ -208,7 +284,6 @@ def batch_geocode(
             results[a] = cached
         else:
             to_query.append(a)
-            to_query.append(a)
 
     if not to_query:
         return results
@@ -243,7 +318,13 @@ def batch_geocode(
             # sleep briefly before next check (non-busy wait)
             time.sleep(max(0.01, 1.0 / (rate * 4)))
 
-    url = "https://nominatim.openstreetmap.org/search"
+    # Check for Google Maps API Key
+    google_api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+    if google_api_key:
+        print("Using Google Maps API for geocoding")
+
+    url_nominatim = "https://nominatim.openstreetmap.org/search"
+    url_google = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def worker(addr: str):
         # double-check cache (in case another thread saved it)
@@ -252,25 +333,155 @@ def batch_geocode(
         if cached:
             return addr, cached
 
-        acquire_token()
+        # Parse Ukrainian address into components for smarter queries
+        parsed = _parse_ukrainian_address(addr)
+        settlement = parsed.get("settlement", "")
+        oblast = parsed.get("oblast", "")
+        raion = parsed.get("raion", "")
+
+        queries = []
+
+        # 1. Try more specific (street-level) queries first
+        # Original address
+        queries.append(addr)
+
+        # Cleaned and reversed variants (strip abbreviations)
+        # Regex to detect noise parts: building, apartment, office, floor, etc.
+        _noise_re = re.compile(
+            r"^(буд|будинок|кв|квартира|оф|офіс|поверх|літ|літера|корп|корпус|прим|кімн|кімната|БЦ|ТЦ)\b",
+            re.IGNORECASE,
+        )
+        # Detect number+descriptor noise like "15 поверх", "9 літ. «А»", or standalone numbers
+        _number_noise_re = re.compile(
+            r"^\d+[\-а-яА-ЯіІїЇєЄґҐ]*(\s+(поверх|літ\.?|літера).*)?$"
+        )
+
+        if "," in addr:
+            parts = [p.strip() for p in addr.split(",")]
+            search_terms = []
+            for part in parts:
+                cleaned = part
+                # Remove suffixes (обл., р-н)
+                cleaned = re.sub(r"\s+(обл\.?|р-н\.?|район|область)\s*$", "", cleaned, flags=re.IGNORECASE)
+                # Remove prefixes — abbreviations with period, plus full words and hyphenated forms
+                cleaned = re.sub(r"^(с|м|смт|вул|пров|просп|бул|пл)\.\s*", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r"^(провулок|проспект|вулиця|місто|село|площа|бульвар)\s+", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(r"^пр-т\s+", "", cleaned, flags=re.IGNORECASE)
+                cleaned = cleaned.strip()
+                if not cleaned:
+                    continue
+                # Skip noise parts (building, apartment, office, floor, etc.)
+                if _noise_re.match(cleaned):
+                    continue
+                if _number_noise_re.match(cleaned):
+                    continue
+                search_terms.append(cleaned)
+            if search_terms:
+                cleaned_full = ", ".join(search_terms)
+                if cleaned_full != addr:
+                    queries.append(cleaned_full)
+                # Reversed order (most specific first — better for Nominatim)
+                reversed_q = ", ".join(reversed(search_terms))
+                if reversed_q not in queries:
+                    queries.append(reversed_q)
+
+        # 2. Settlement-level queries as fallback (less specific)
+        if settlement:
+            if oblast:
+                queries.append(f"{settlement}, {oblast} область, Україна")
+            if raion and oblast:
+                queries.append(f"{settlement}, {raion} район, {oblast} область")
+            queries.append(f"{settlement}, Україна")
+
+        # Deduplicate queries while preserving order
+        unique_queries = []
+        seen_q = set()
+        for q in queries:
+            if q and q not in seen_q:
+                unique_queries.append(q)
+                seen_q.add(q)
+
         session = get_session()
-        try:
-            params = {
-                "q": addr,
-                "format": "json",
-                "limit": 1,
-                "countrycodes": "ua",
-                "addressdetails": 1,
-            }
-            resp = session.get(url, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            if data and len(data) > 0:
-                r = data[0]
-                coords = {"lat": float(r["lat"]), "lng": float(r["lon"])}
-                return addr, coords
-        except (OSError, PermissionError, ValueError, TypeError, IOError):
-            return addr, None
+
+        # Try each query with Google (if available), then Nominatim as fallback
+        for q in unique_queries:
+            acquire_token()
+            try:
+                coords = None
+
+                if google_api_key:
+                    # Google Maps Geocoding
+                    params = {"address": q, "key": google_api_key, "language": "uk"}
+                    resp = session.get(url_google, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    if data.get("status") == "OK" and data.get("results"):
+                        loc = data["results"][0]["geometry"]["location"]
+                        coords = {"lat": float(loc["lat"]), "lng": float(loc["lng"])}
+
+                # Fall back to Nominatim if Google didn't return results
+                if not coords:
+                    acquire_token()
+                    params = {
+                        "q": q,
+                        "format": "json",
+                        "limit": 1,
+                        "countrycodes": "ua",
+                        "addressdetails": 1,
+                    }
+                    resp = session.get(url_nominatim, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if data and len(data) > 0:
+                        r = data[0]
+                        coords = {"lat": float(r["lat"]), "lng": float(r["lon"])}
+
+                if coords:
+                    return addr, coords
+
+            except (
+                requests.RequestException,
+                OSError,
+                PermissionError,
+                ValueError,
+                TypeError,
+                IOError,
+            ):
+                # If error occurs on one variation, continue to next
+                continue
+
+        # Last resort: structured Nominatim query (most reliable for Ukrainian)
+        if settlement:
+            acquire_token()
+            try:
+                struct_params = {
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "ua",
+                    "city": settlement,
+                }
+                if oblast:
+                    struct_params["state"] = oblast + " область"
+                resp = session.get(url_nominatim, params=struct_params, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                if data and len(data) > 0:
+                    r = data[0]
+                    coords = {"lat": float(r["lat"]), "lng": float(r["lon"])}
+                    return addr, coords
+            except (
+                requests.RequestException,
+                OSError,
+                PermissionError,
+                ValueError,
+                TypeError,
+                IOError,
+            ):
+                pass
+
+        # No results found after all attempts
+        return addr, None
 
     # Execute queries in thread pool
     # success_count tracks number of successful geocodes we have persisted
@@ -300,9 +511,14 @@ def batch_geocode(
                 except (TimeoutError, ConnectionError, ValueError, KeyError):
                     addr, coords = a, None
 
-                    if coords:
-                        results[addr] = coords
+                # Store result
+                if coords:
+                    results[addr] = coords
+                else:
+                    results[addr] = None
 
+                # Save only successful results to cache (don't cache failures)
+                if coords:
                     try:
                         key = _geocode_cache_key(addr)
                         with _GEOCODE_CACHE_LOCK:
@@ -316,8 +532,6 @@ def batch_geocode(
                     except (ValueError, TypeError, OSError, PermissionError, IOError):
                         print("Could not update geocode cache on disk.")
 
-                else:
-                    results[addr] = None
                 completed += 1
 
                 if use_tqdm and progress_bar is not None:
@@ -583,22 +797,22 @@ def merge_clients(
         keys: list[str] = []
         name = normalize_name(c.get("name") or "")
         coords = coord_key(c)
+
+        # Unique identifier from Notion if available
+        # But this function doesn't seem to pass ID down from Notion
+
         if name and coords is not None:
+            # Deduplicate ONLY if name AND coordinates are identical.
+            # This allows multiple clients with same name but different locations,
+            # or same location but different names (e.g. offices in same building)
             keys.append(f"name_coord:{name}:{coords[0]}:{coords[1]}")
         elif name:
+            # If no coords, use name only
             keys.append(f"name:{name}")
 
-        phone = normalize_phone(c.get("phone") or "")
-        if phone:
-            keys.append(f"phone:{phone}")
-
-        email = normalize_email(c.get("email") or "")
-        if email:
-            keys.append(f"email:{email}")
-
-        # fallback key using rounded coords only
-        if coords is not None:
-            keys.append(f"coord:{coords[0]}:{coords[1]}")
+        # Removed strict phone/email/coordinate-only deduplication
+        # This was too aggressive and merging distinct clients who shared a phone number
+        # or were in the exact same building.
 
         return keys
 

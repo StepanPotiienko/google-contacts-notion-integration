@@ -7,19 +7,24 @@ import sys
 import time
 from pathlib import Path
 from typing import Optional
-
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-import notion_controller
-
 
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+try:
+    import notion_controller
+except ImportError as exc:
+    raise ImportError(
+        "Failed to import notion_controller. Run from the repo root or ensure the "
+        "project root is on PYTHONPATH."
+    ) from exc
 
 load_dotenv()
 SCOPES = ["https://www.googleapis.com/auth/contacts.readonly"]

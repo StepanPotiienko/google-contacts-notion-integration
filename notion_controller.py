@@ -529,7 +529,9 @@ class NotionController:
         contact_name, email, phone = contact
 
         def create_page():
-            properties = {"Name": {"title": [{"text": {"content": contact_name}}]}}
+            properties = {
+                "Client Name": {"title": [{"text": {"content": contact_name}}]}
+            }
 
             # Only add email if it's valid
             if email and email != "No email":
@@ -537,7 +539,9 @@ class NotionController:
 
             # Only add phone if it's valid
             if phone and phone != "No phone":
-                properties["Phone"] = {"rich_text": [{"text": {"content": phone}}]}
+                properties["phone_number"] = {
+                    "rich_text": [{"text": {"content": phone}}]
+                }
 
             return self.notion_client.pages.create(
                 parent={"database_id": CRM_DATABASE_ID},

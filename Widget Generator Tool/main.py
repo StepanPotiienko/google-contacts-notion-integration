@@ -29,6 +29,25 @@ from notion_utils import fetch_clients_from_notion
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "public")
 app = Flask(__name__, static_folder=STATIC_DIR)
 
+# Increase max content length to handle large widget HTML payloads (100MB)
+# Default is 16MB, but with 700+ geocoded clients, widgets can be larger
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
+
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Handle requests that exceed MAX_CONTENT_LENGTH."""
+    return (
+        jsonify(
+            {
+                "error": "Request too large",
+                "message": f"Maximum request size is {app.config['MAX_CONTENT_LENGTH'] // (1024*1024)}MB",
+                "suggestion": "Try reducing the number of clients or contact support",
+            }
+        ),
+        413,
+    )
+
 
 @app.route("/")
 def index():
@@ -38,15 +57,26 @@ def index():
 
 @app.route("/api/generate-widget", methods=["POST"])
 def generate_widget():
-    """API endpoint to generate a widget from Notion data."""
+    """API endpoint to generate a widget from Notion data.
+
+    Now stores the widget on the server and returns just the widget ID and preview URL.
+    This avoids the client having to POST large HTML payloads back to the server.
+    """
     data = request.get_json()
     # Support both camelCase and snake_case
     api_key = data.get("api_key") or data.get("apiKey")
     database_id = data.get("database_id") or data.get("databaseId")
+    
+    # Fallback to env vars if not provided in request
+    if not api_key:
+        api_key = os.environ.get("NOTION_API_KEY")
+    if not database_id:
+        database_id = os.environ.get("NOTION_DATABASE_ID")
+
     # CSV/stored clients removed — only Notion clients are used now.
 
     if not api_key or not database_id:
-        return jsonify({"error": "Missing API key or database ID"}), 400
+        return jsonify({"error": "Missing API key or database ID (check .env or request body)"}), 400
 
     notion_clients = []
 
@@ -63,13 +93,33 @@ def generate_widget():
         geocode_flag = bool(geocode_flag)
 
         if api_key and database_id:
+            # fetch_clients_from_notion is async, run in event loop
             notion_clients = asyncio.run(
                 fetch_clients_from_notion(api_key, database_id)
             )
 
         # Use Notion clients only; dedupe within the set if necessary.
         clients = merge_clients([], notion_clients, dedupe=True)
-        clients_json = json.dumps(clients)
+
+        pre_filter_count = len(clients)
+        # Filter out clients without valid coordinates to prevent map rendering errors
+        clients = [
+            c for c in clients if c.get("lat") is not None and c.get("lng") is not None
+        ]
+        post_filter_count = len(clients)
+
+        if pre_filter_count != post_filter_count:
+            print(
+                f"⚠️  Final Filter: Dropped {pre_filter_count - post_filter_count} clients due to missing coordinates"
+            )
+            print(
+                f"   (These clients had addresses but geocoding failed or returned no results)"
+            )
+
+        # Prevent basic script injection by escaping tags
+        clients_json = (
+            json.dumps(clients).replace("<", "\\u003c").replace(">", "\\u003e")
+        )
 
         # Prefer using the `public/widget.html` file as the authoritative template.
         # Read the file and replace the `const clients = [...]` declaration with actual data.
@@ -92,7 +142,23 @@ def generate_widget():
             # Fall back to the inline template if the file isn't available
             widget_html = INLINE_MAP_TEMPLATE.format(clients_json=clients_json)
 
-        return jsonify({"widget": widget_html, "clients": len(clients)})
+        # Store widget immediately on the server to avoid large payloads
+        html_size_mb = len(widget_html.encode("utf-8")) / (1024 * 1024)
+        print(
+            f"[INFO] Generated widget HTML: {html_size_mb:.2f} MB for {len(clients)} clients"
+        )
+
+        wid = _store_widget(widget_html)
+        preview_url = url_for("view_widget_id", wid=wid, _external=True)
+
+        return jsonify(
+            {
+                "widget_id": wid,
+                "preview_url": preview_url,
+                "clients": len(clients),
+                "size_mb": round(html_size_mb, 2),
+            }
+        )
     except (
         requests.RequestException,
         KeyError,
@@ -140,6 +206,11 @@ def view_widget():
         widget_html = request.form.get("html")
         if not widget_html:
             return "No widget data provided", 400
+
+        # Log the size of the widget HTML for monitoring
+        html_size_mb = len(widget_html.encode("utf-8")) / (1024 * 1024)
+        print(f"[INFO] Received widget HTML: {html_size_mb:.2f} MB")
+
         wid = _store_widget(widget_html)
         return redirect(url_for("view_widget_id", wid=wid))
 
@@ -156,10 +227,23 @@ def view_widget_id(wid: str):
     return render_template_string(widget_html)
 
 
+@app.route("/api/widget/<wid>", methods=["GET"])
+def get_widget_html(wid: str):
+    """Get raw widget HTML by ID for embedding. Returns JSON with HTML content."""
+    widget_html = _get_widget(wid)
+    if not widget_html:
+        return jsonify({"error": "Widget not found or expired"}), 404
+
+    html_size_mb = len(widget_html.encode("utf-8")) / (1024 * 1024)
+    return jsonify(
+        {"widget_id": wid, "html": widget_html, "size_mb": round(html_size_mb, 2)}
+    )
+
+
 # Simple in-memory temporary store for large widget HTML payloads.
 # Keys are short hex ids; values are tuples (html, expiry_timestamp).
 _WIDGET_STORE = {}
-_WIDGET_TTL = 60 * 10  # 10 minutes
+_WIDGET_TTL = 60 * 60 * 24  # 24 hours (widgets now stored server-side)
 
 
 def _store_widget(html: str) -> str:

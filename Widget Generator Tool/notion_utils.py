@@ -1,6 +1,7 @@
 """Utilities for fetching and processing Notion data."""
 
 import time
+import json  # added import
 
 import requests
 from utils import (
@@ -23,6 +24,9 @@ async def fetch_clients_from_notion(api_key, database_id):
     entries_processed = 0
     entries_with_place = 0
     entries_geocoded = 0
+    dropped_source_mismatch = 0
+    dropped_no_address = 0
+    failed_geocodes = []
 
     try:
         print("Fetching data from Notion...")
@@ -62,6 +66,7 @@ async def fetch_clients_from_notion(api_key, database_id):
                     )
 
             if source_value != "БАЗА":
+                dropped_source_mismatch += 1
                 continue
 
             # If we reach here, entry has passed the filter
@@ -163,15 +168,20 @@ async def fetch_clients_from_notion(api_key, database_id):
             address_display = ""  # For showing in popup
             latlng = None
 
-            # 1. Try the АДРЕСА property (Ukrainian address field - uppercase version has data)
-            address_ua = props.get("АДРЕСА") or props.get("Адреса")
-            if address_ua and address_ua.get("rich_text"):
-                place = (
-                    address_ua["rich_text"][0]["plain_text"]
-                    if address_ua["rich_text"]
-                    else ""
-                )
-                address_display = place
+            # 1. Try iterating through known address fields until we find one with text
+            address_candidates = ["АДРЕСА", "Адреса", "Address 1 - Formatted"]
+            for candidate_key in address_candidates:
+                candidate_prop = props.get(candidate_key)
+                if candidate_prop and candidate_prop.get("rich_text"):
+                    potential_place = (
+                        candidate_prop["rich_text"][0]["plain_text"]
+                        if candidate_prop["rich_text"]
+                        else ""
+                    )
+                    if potential_place and potential_place.strip():
+                        place = potential_place
+                        address_display = place
+                        break  # Found a valid address, stop looking
 
             # 2. Try the Place property (Notion location type)
             if not latlng and not place:
@@ -192,16 +202,19 @@ async def fetch_clients_from_notion(api_key, database_id):
                             place = location_value["name"]
                             address_display = place
 
-            # 3. Try formatted address
+            # 3. Try Address 1 - Formatted
             if not latlng and not place:
                 addr_formatted = props.get("Address 1 - Formatted")
                 if addr_formatted and addr_formatted.get("rich_text"):
-                    place = (
+                    # Only use if rich_text is not empty
+                    potential_place = (
                         addr_formatted["rich_text"][0]["plain_text"]
                         if addr_formatted["rich_text"]
                         else ""
                     )
-                    address_display = place
+                    if potential_place and potential_place.strip():
+                        place = potential_place
+                        address_display = place
 
             # 4. Build from components
             if not latlng and not place:
@@ -214,12 +227,13 @@ async def fetch_clients_from_notion(api_key, database_id):
                 ]:
                     comp = props.get(key)
                     if comp and comp.get("rich_text"):
+                        # Only use if rich_text is not empty
                         txt = (
                             comp["rich_text"][0]["plain_text"]
                             if comp["rich_text"]
                             else ""
                         )
-                        if txt:
+                        if txt and txt.strip():
                             address_parts.append(txt)
                 if address_parts:
                     place = ", ".join(address_parts)
@@ -268,6 +282,21 @@ async def fetch_clients_from_notion(api_key, database_id):
                 page_id = page.get("id")
                 page_edited = page.get("last_edited_time") or ""
                 pending_pages.append((client_data, place, name, page_id, page_edited))
+            else:
+                dropped_no_address += 1
+                # Log the first few dropped addresses to debug
+                if dropped_no_address <= 5:
+                    print(
+                        f"DEBUG: Dropped client '{name}' - No address found in properties. Available keys: {list(props.keys())}"
+                    )
+                    # Inspect 'Адреса' or 'АДРЕСА' specifically
+                    addr_debug = props.get("АДРЕСА") or props.get("Адреса")
+                    if addr_debug:
+                        print(
+                            f"DEBUG: Found 'Адреса' property content: {json.dumps(addr_debug, default=str)}"
+                        )
+                    else:
+                        print("DEBUG: 'Адреса' property is missing or None")
 
         # Batch geocode collected places with page-level change-detection using last_edited_time
         if pending_pages:
@@ -306,6 +335,8 @@ async def fetch_clients_from_notion(api_key, database_id):
                     edited = p.get("edited") or ""
                     page_key = f"page::{pid}" if pid else None
 
+                    coords_found = False
+
                     page_cached = None
                     if page_key:
                         page_cached = _geocode_cache_manager.get(page_key)
@@ -320,63 +351,74 @@ async def fetch_clients_from_notion(api_key, database_id):
                                 if coords:
                                     p["client"]["lat"] = coords["lat"]
                                     p["client"]["lng"] = coords["lng"]
-                                    continue
+                                    coords_found = True
 
                         # If page cache is a raw coords dict, assume valid
-                        if isinstance(page_cached, dict) and page_cached.get("lat"):
+                        if (
+                            not coords_found
+                            and isinstance(page_cached, dict)
+                            and page_cached.get("lat")
+                        ):
                             coords = page_cached
                             p["client"]["lat"] = coords.get("lat")
                             p["client"]["lng"] = coords.get("lng")
-                            continue
+                            coords_found = True
 
-                    # Fall back to address-keyed cache
-                    addr_key = _geocode_cache_key(place)
-                    addr_cached = _geocode_cache_manager.get(addr_key)
-                    coords = None
-                    if addr_cached:
-                        # address cache may be {'coords': {...}} or raw coords
-                        if isinstance(addr_cached, dict) and addr_cached.get("coords"):
-                            coords = addr_cached.get("coords")
-                        elif isinstance(addr_cached, dict) and addr_cached.get("lat"):
-                            coords = {
-                                "lat": addr_cached.get("lat"),
-                                "lng": addr_cached.get("lng"),
-                            }
+                    # Fall back to address-keyed cache if page cache didn't work
+                    if not coords_found:
+                        addr_key = _geocode_cache_key(place)
+                        addr_cached = _geocode_cache_manager.get(addr_key)
+                        coords = None
+                        if addr_cached:
+                            # address cache may be {'coords': {...}} or raw coords
+                            if isinstance(addr_cached, dict) and addr_cached.get(
+                                "coords"
+                            ):
+                                coords = addr_cached.get("coords")
+                            elif isinstance(addr_cached, dict) and addr_cached.get(
+                                "lat"
+                            ):
+                                coords = {
+                                    "lat": addr_cached.get("lat"),
+                                    "lng": addr_cached.get("lng"),
+                                }
 
-                    if coords:
-                        # assign to client and create page-specific cache entry for faster next runs
-                        p["client"]["lat"] = coords["lat"]
-                        p["client"]["lng"] = coords["lng"]
-                        try:
-                            pid = p.get("page_id")
-                            edited = p.get("edited") or ""
-                            if pid:
-                                page_key = f"page::{pid}"
-                                with _GEOCODE_CACHE_LOCK:
-                                    _geocode_cache_manager.set(
-                                        page_key,
-                                        {
-                                            "coords": coords,
-                                            "last_edited_time": edited,
-                                            "address": place,
-                                        },
-                                    )
-                        except (
-                            ValueError,
-                            TypeError,
-                            OSError,
-                            PermissionError,
-                            IOError,
-                        ):
-                            print(
-                                "An error occurred while saving geocode cache for page."
-                            )
-                            return
+                        if coords:
+                            # assign to client and create page-specific cache entry for faster next runs
+                            p["client"]["lat"] = coords["lat"]
+                            p["client"]["lng"] = coords["lng"]
+                            coords_found = True
+                            try:
+                                pid = p.get("page_id")
+                                edited = p.get("edited") or ""
+                                if pid:
+                                    page_key = f"page::{pid}"
+                                    with _GEOCODE_CACHE_LOCK:
+                                        _geocode_cache_manager.set(
+                                            page_key,
+                                            {
+                                                "coords": coords,
+                                                "last_edited_time": edited,
+                                                "address": place,
+                                            },
+                                        )
+                            except (
+                                ValueError,
+                                TypeError,
+                                OSError,
+                                PermissionError,
+                                IOError,
+                            ):
+                                print(
+                                    "An error occurred while saving geocode cache for page."
+                                )
 
-                        continue
-
-                    # If we reached here, this page needs geocoding
-                    need_geo = True
+                    # If we found coords from cache, mark as geocoded and don't re-query
+                    if coords_found:
+                        entries_geocoded += 1
+                    else:
+                        # If we reached here, this page needs geocoding
+                        need_geo = True
 
                 if need_geo:
                     uniq_places.append(place)
@@ -406,7 +448,7 @@ async def fetch_clients_from_notion(api_key, database_id):
                     pid = p.get("page_id")
                     edited = p.get("edited") or ""
 
-                    # If client already has lat/lng from cache above, keep it
+                    # If client already has lat/lng from cache, it's already geocoded
                     if client_obj.get("lat") and client_obj.get("lng"):
                         clients.append(client_obj)
                         continue
@@ -440,9 +482,18 @@ async def fetch_clients_from_notion(api_key, database_id):
                             print(
                                 "An error occurred while saving geocode cache for page."
                             )
-                            return
                     else:
-                        print(f"  ⚠️  Failed to geocode: {p.get('name')} - {place}")
+                        # Geocoding failed — do NOT add to results (no valid coordinates)
+                        if "failed_geocodes" in locals():
+                            failed_geocodes.append(
+                                f"{client_obj.get('name', 'Unknown')} ({place})"
+                            )
+                        print(
+                            f"  ⚠️  Failed to geocode: {client_obj.get('name', 'Unknown')} - {place}"
+                        )
+                        continue
+
+                    clients.append(client_obj)
 
             # flush cache after processing
             try:
@@ -463,3 +514,19 @@ async def fetch_clients_from_notion(api_key, database_id):
     except (requests.RequestException, KeyError, ValueError, AttributeError) as e:
         print(f"\nError fetching clients: {str(e)}\n")
         raise
+
+    finally:
+        print(f"\n--- Notion Fetch Summary ---")
+        print(
+            f"Total entries fetched: {total_entries if 'total_entries' in locals() else 'Unknown'}"
+        )
+        print(f"Dropped (Source != 'БАЗА'): {dropped_source_mismatch}")
+        print(f"Dropped (No Address/Coords): {dropped_no_address}")
+        print(
+            f"Passed to geocoding/processing: {len(clients) + len(pending_pages) if 'pending_pages' in locals() else 0}"
+        )
+        if "failed_geocodes" in locals() and failed_geocodes:
+            print(f"\n--- FAILED GEOCODES ({len(failed_geocodes)}) ---")
+            for fail in failed_geocodes:
+                print(f" - {fail}")
+        print(f"----------------------------\n")
