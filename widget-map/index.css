@@ -26,10 +26,6 @@ body {
   cursor: pointer;
 }
 
-.marker:hover {
-  /* Hover animation disabled */
-}
-
 .maplibregl-popup {
   max-width: 320px !important;
 }
