@@ -3,67 +3,12 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="styles.css">
-  <title>Bring new Google Contacts to Notion</title>
+  <meta http-equiv="refresh" content="0;url=widget-map/">
+  <title>Client Map</title>
 </head>
 
 <body>
-
-  <div class="container">
-    <div class="main-content">
-      <h2>Update Notion with new Google Contacts</h2>
-      <div class="button-container" id="triggerWorkflow">
-        <button>Update</button>
-      </div>
-    </div>
-    <div class="logs">
-      <h3>Logs</h3>
-      <pre>
-      </pre>
-    </div>
-  </div>
-
+  <p><a href="widget-map/">Open map</a></p>
 </body>
-<script>
-  const logContainer = document.querySelector('.logs pre');
-  const button = document.querySelector('#triggerWorkflow button');
-
-  function appendLog(message) {
-    logContainer.textContent += `\n${message}`;
-    logContainer.scrollTop = logContainer.scrollHeight; // auto scroll to bottom
-  }
-
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    appendLog("Triggering workflow...");
-
-    try {
-      const response = await fetch('/trigger', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          appendLog("✅ Workflow triggered successfully!");
-        } else {
-          appendLog("⚠️ Unexpected response: " + JSON.stringify(data));
-        }
-      } else {
-        const text = await response.text();
-        appendLog(`❌ GitHub API returned error (${response.status}): ${text}`);
-      }
-    } catch (err) {
-      appendLog(`❌ Fetch failed: ${err}`);
-    } finally {
-      button.disabled = false;
-    }
-  });
-</script>
-
 
 </html>
