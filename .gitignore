@@ -1,8 +1,6 @@
 .DS_Store
-worker/.DS_Store
 .vscode/
 .wranger/
-.DS_Store
 *.csv
 __pycache__/
 *.pyc
@@ -24,16 +22,21 @@ db.sqlite3
 media/
 staticfiles/
 static/
-.DS_Store
-worker/.DS_Store
 worker/
-clients_store.json
-sync_token.txt
-
-# Ignore large generated clients array used by widget
-Widget Generator Tool/public/clients_array.js
-
-
 sync_token.txt
 contacts_to_sync.json
 dedup_checkpoint.json
+
+# Generated data files
+clients_store.json
+clients_array.js
+Widget Generator Tool/public/clients_array.js
+Widget Generator Tool/public/clients_store.json
+Widget Generator Tool/public/geocode_cache.json
+
+# Runtime state files
+website/seen_ids.txt
+website/seen_orders.txt
+
+# Generated docs
+TESTING_VALIDATION.md
