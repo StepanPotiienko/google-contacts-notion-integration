@@ -1,90 +1,15 @@
-const clients = [
-  { "name": "ТОВ Колос-Богодарівка", "color": "#ef4444", "phone": "(050)4426045", "email": "rost_agro@i.ua", "contact": "Горенка Олександр Леонідович (дир)", "address": "Полтавська обл., Лубенський р-н, с. Богодарівка", "notes": "96 грн откат", "label": "", "orgTitle": "", "lat": 50.390095, "lng": 32.9920775 },
-  { "name": "ПП Мазуртехсервіс", "color": "#EF4444FF", "phone": "(067)4793397", "email": "mazurtechservice@gmail.com", "contact": "Мазур Анатолй Миколайович (дир)", "address": "Київська обл., Обухівський р-н, м. Миронівка", "notes": "", "label": "", "orgTitle": "", "lat": 49.665033, "lng": 30.9894691 },
-  { "name": "ФГ СКМ", "color": "#ef4444", "phone": "(097)3887756", "email": "fg_ckm@ukr.net", "contact": "Лебедь Сергій Миколайович (дир)", "address": "Дніпропетровська обл., Магдалинівський р-н, село Оленівка", "notes": "доставка за наш рахунок", "label": "", "orgTitle": "", "lat": 48.9417873, "lng": 34.9867216 },
-  { "name": "ПСП Мир", "color": "#ef4444", "phone": "(096)6422772", "email": "mir_psp@ukr.net", "contact": "Донець Олександр Васильович (дир)", "address": "Одеська обл., Іванівський р-н, с.Лізинка", "notes": "", "label": "", "orgTitle": "", "lat": 46.8977597, "lng": 30.645064 },
-  { "name": "ФГ Бегінін Г.О.", "color": "#ef4444", "phone": "(098)2424299", "email": "fermer.solone@gmail.com, gennady.beginin@gmail.com", "contact": "Бегінін Геннадій Олексійович (дир)", "address": "Дніпропетровська обл., Солонянський р-н, с.Сонячне", "notes": "", "label": "", "orgTitle": "", "lat": 48.0586886, "lng": 34.7959276 },
-  { "name": "ПП Агротайм", "color": "#ef4444", "phone": "(067)2614626", "email": "mr.ruha@ukr.net", "contact": "Дуднік Руслан Ярославович (дир)", "address": "Кіровоградська обл., м. Кропивницький", "notes": "", "label": "", "orgTitle": "", "lat": 48.5070977, "lng": 32.2641984 },
-  { "name": "ТОВ Бетон+М", "color": "#ef4444", "phone": "(067)5328253", "email": "betonm-plus@ukr.net", "contact": "Міхалевич Владислав Вікторович (дир)", "address": "Полтавська обл., м. Кременчук, вул.Свіштовська, буд.9", "notes": "", "label": "", "orgTitle": "", "lat": 49.065783, "lng": 33.410033 },
-  { "name": "ТОВ Структум", "color": "#ef4444", "phone": "(067)5328253", "email": "info@structum.ua", "contact": "Бокань Олександр Володимирович (дир)", "address": "м. Київ, вул. Жилянська, буд. 59, оф. 107", "notes": "", "label": "", "orgTitle": "", "lat": 50.4503596, "lng": 30.5245025 },
-  { "name": "ПП АФ Центр", "color": "#ef4444", "phone": "(067)2000050", "email": "ppcentr@ukr.net", "contact": "Мдзінарашвілі Дмитро Гочевич (дир)", "address": "Кіровоградська обл., Устинівський р-н, с.Садки", "notes": "", "label": "", "orgTitle": "", "lat": 48.0216519, "lng": 32.7271829 },
-  { "name": "ТОВ Гідро-Гід", "color": "#ef4444", "phone": "(050)9460029", "email": "info@hydro-gid.com.ua", "contact": "Скрипніков Вячеслав Олександрович (дир)", "address": "Харківська обл., с.Пісочин", "notes": "", "label": "", "orgTitle": "", "lat": 50.0020127, "lng": 36.3073994 },
-  { "name": "Виконком Градизької селищної ради", "color": "#ef4444", "phone": "(099)4741833", "email": "gradrada4@ukr.net", "contact": "селищний голова Носа Мирослав", "address": "Полтавська обл.,Кременчуцький р-н., смт. Градизьк", "notes": "", "label": "", "orgTitle": "", "lat": 49.2302517, "lng": 33.1264307 },
-  { "name": "ФГ Ларіне", "color": "#ef4444", "phone": "(067)4527845", "email": "larinee@meta.ua", "contact": "Чумаков Сергій Володимирович (дир)", "address": "Миколаївська обл., Первомайський р-н, смт.Арбузинка", "notes": "", "label": "", "orgTitle": "", "lat": 47.9114733, "lng": 31.3156749 },
-  { "name": "ТОВ Кроклан-Приват", "color": "#ef4444", "phone": "(050)2080848", "email": "nfo@paragon-ua.com", "contact": "Вінгаль Валентина Олександрівн (дир)", "address": "Полтавська обл., м. Кременчук", "notes": "повернення грошей за ремонт плуга БЗК", "label": "", "orgTitle": "", "lat": 49.065783, "lng": 33.410033 },
-  { "name": "ТОВ Укрелко", "color": "#ef4444", "phone": "(068)2962349", "email": "sergiy.korsun@ldc.com", "contact": "Переваруха Сергій Вікторович (кер зерноскладу)", "address": "м. Київ, Площа Спортивна, БЦ «Гулівер», будинок 1-А, 15 поверх", "notes": "", "label": "", "orgTitle": "", "lat": 50.438611, "lng": 30.523056 },
-  { "name": "ФГ Фермагролідер", "color": "#ef4444", "phone": "(050)3055855", "email": "fermagrolider@ukr.net", "contact": "Чикриж Юрій Павлович (дир)", "address": "Полтавська обл., Полтавський р-н, с. Говтва", "notes": "", "label": "", "orgTitle": "", "lat": 49.4209395, "lng": 33.8652939 },
-  { "name": "СФГ Дослідне", "color": "#ef4444", "phone": "(050)3083451", "email": "sfg.doslidne@gmail.com, doslidne@i.ua", "contact": "Мокляк Володимир Якович (дир)", "address": "Полтавська обл., Семенівський р-н, смт.Семенівка", "notes": "по факту - проектування купола церкви", "label": "", "orgTitle": "", "lat": 49.5978332, "lng": 33.1889707 },
-  { "name": "ФГ Лідер", "color": "#ef4444", "phone": "(067)5325436", "email": "fglanik@gmail.com", "contact": "Хохлов Ігор Петрович (дир)", "address": "Дніпропетровська обл., Кам'янський  р-н, с. Ганнівка", "notes": "", "label": "", "orgTitle": "", "lat": 47.5153982, "lng": 33.3019233 },
-  { "name": "СФГ Богданюка Володимира Олександровича", "color": "#ef4444", "phone": "(067)9975716", "email": "sfgbogdanyuk@ukr.net", "contact": "Богданюк Володимир Олександрович (дир)", "address": "Вінницька обл., Барський р-н, с.Мигалівці", "notes": "", "label": "", "orgTitle": "", "lat": 49.0308705, "lng": 27.5439377 },
-  { "name": "СФГ Лілія", "color": "#ef4444", "phone": "(098)4028015", "email": "serega0711@ukr.net", "contact": "Дєміров Сергій Петрович (дир)", "address": "Одеська обл., Болградський р-н, с.Красне", "notes": "", "label": "", "orgTitle": "", "lat": 46.1183654, "lng": 29.246249 },
-  { "name": "СФГ Луч", "color": "#ef4444", "phone": "(067)7998134", "email": "lenasat82@i.ua", "contact": "Шамрай Володимир Миколайович (дир)", "address": "Дніпропетровська обл., Новомосковський р-н, с. Ягідне", "notes": "доставка за наш рахунок", "label": "", "orgTitle": "", "lat": 48.4516192, "lng": 35.3384269 },
-  { "name": "ФГ Поділля-Агроплюс", "color": "#ef4444", "phone": "(067)5739278", "email": "podillya-agroplus@ukr.net", "contact": "Андрющенко Сергій Іванович (дир)", "address": "Харківська обл., Золочівський р-н, смт.Золочів", "notes": "", "label": "", "orgTitle": "", "lat": 50.2690697, "lng": 35.9760431 },
-  { "name": "ТОВ Співдружність Агротехмаш", "color": "#ef4444", "phone": "(098)8380823", "email": "ii99ua99ii@gmail.com", "contact": "Шомко Ігор Іванович (дир)", "address": "Полтавська обл., Полтавський р-н, с.Вільховатка", "notes": "", "label": "", "orgTitle": "", "lat": 48.9462477, "lng": 34.1910788 },
-  { "name": "СФГ Безуменко В.І.", "color": "#ef4444", "phone": "(099)4660444", "email": "", "contact": "Безуменко Володимир Іванович (дир)", "address": "Кіровоградська обл., Бобринецький р-н, с.Павлогірківка", "notes": "", "label": "", "orgTitle": "", "lat": 48.0863133, "lng": 31.817346 },
-  { "name": "ТОВ Смарт Кропс", "color": "#ef4444", "phone": "(097)7414445", "email": "smartcrops@ukr.net", "contact": "Підвальний Володимир Олексійович (дир)", "address": "м. Львів, вул. Василя Мови б.12, кв. 1", "notes": "", "label": "", "orgTitle": "", "lat": 49.839683, "lng": 24.029717 },
-  { "name": "ПАФ Єрчики", "color": "#ef4444", "phone": "(096)5074227", "email": "paf - erchiki@ukr.net", "contact": "Дідківський Мирослав  Володимирович (дир)", "address": "Житомирська обл., Житомирський р-н, с.Єрчики", "notes": "", "label": "", "orgTitle": "", "lat": 49.9963634, "lng": 29.5794178 },
-  { "name": "Асоціація ФГ Віка", "color": "#ef4444", "phone": "(098)6140227", "email": "avrka2000@ukr.net", "contact": "Кожушко Лариса Григорівна", "address": "Кіровоградська обл., Новоархангельський р-н, с.Надлак", "notes": "конфлікт з директором", "label": "", "orgTitle": "", "lat": 48.7289201, "lng": 31.1361039 },
-  { "name": "ФГ Атей", "color": "#ef4444", "phone": "(097)7117298", "email": "dlggora@ukr.net", "contact": "Краєвський Віктор Володимирович (дир)", "address": "Миколаївська обл., Первомайський р-н, село Лиса Гора", "notes": "", "label": "", "orgTitle": "", "lat": 48.1758321, "lng": 31.0932091 },
-  { "name": "ФОП Кобченко М.Г.", "color": "#ef4444", "phone": "(050)3051992, (050)6311069", "email": "td_dchk@ukr.net", "contact": "Кобченко Марина Геннадіївна (дир)", "address": "Полтавська обл., Карлівський район, с. Федорівка", "notes": "", "label": "", "orgTitle": "", "lat": 49.3790259, "lng": 35.1128921 },
-  { "name": "ФОП Крюков В.Л.", "color": "#ef4444", "phone": "(096)4420185", "email": "krukov2020@ukr.net", "contact": "Крюков Віктор Леонідович (дир)", "address": "Вінницька обл., Могилів-Подільський р-н, с.Садова", "notes": "", "label": "", "orgTitle": "", "lat": 48.5366083, "lng": 27.9230171 },
-  { "name": "ПП Вім-агро", "color": "#ef4444", "phone": "(097)8926321", "email": "vimagro2015@gmail.com", "contact": "Вахній Іван Михайлович (дир)", "address": "Івано-Франківська обл., Тисменицький р-н, с.Добровляни", "notes": "", "label": "", "orgTitle": "", "lat": 48.9895098, "lng": 24.3517745 },
-  { "name": "ФГ Луга", "color": "#ef4444", "phone": "(097)9917290, (067)7284704", "email": "luga1987@ukr.net", "contact": "Степанюк Ольга Петрівна (дир)", "address": "Волинська обл., Луцький р-н., с. Лемешів, вул.Садова, 4", "notes": "", "label": "", "orgTitle": "", "lat": 50.565687, "lng": 24.6700957 },
-  { "name": "ФГ Явірське", "color": "#ef4444", "phone": "(050)0613943", "email": "zverko.tatyana@ukr.net", "contact": "Звєрко Володимир Олександрович (дир)", "address": "Харківська обл., Ізюмський р-н, с. Явірське", "notes": "", "label": "", "orgTitle": "", "lat": 49.5546255, "lng": 36.7535959 },
-  { "name": "ДП АФ Победа", "color": "#ef4444", "phone": "(098)8511980", "email": "", "contact": "Алєксєєв Ростислав Ростиславович (дир)", "address": "Дніпропетровська обл., Томаківський р-н, с.Топила", "notes": "", "label": "", "orgTitle": "", "lat": 47.7929667, "lng": 34.735998 },
-  { "name": "ФГ Сот", "color": "#ef4444", "phone": "(097)8471635", "email": "", "contact": "", "address": "Одеська обл., Подільський р-н, с.Адамівка", "notes": "", "label": "", "orgTitle": "", "lat": 46.8904746, "lng": 30.5045698 },
-  { "name": "ТОВ Елітне насіння", "color": "#ef4444", "phone": "(067)5145614", "email": "agrohim_nk@ukr.net", "contact": "Васильєва Ольга Анатоліївна (дир)", "address": "м.Миколаїв", "notes": "", "label": "", "orgTitle": "", "lat": 46.9660801, "lng": 32.003246 },
-  { "name": "ТОВ Парагон трейд", "color": "#ef4444", "phone": "(098)2080828", "email": "info@paragon-ua.com", "contact": "Тур Юлія Іванівна (дир)", "address": "Полтавська обл., м.Кременчук, провулок Медовий, будинок № 2 В", "notes": "послуга КЗМВ, оплатив ПАРАГОН", "label": "", "orgTitle": "", "lat": 49.094854, "lng": 33.4500453 },
-  { "name": "ФГ Віра", "color": "#ef4444", "phone": "(067)2566812", "email": "viraniko@meta.ua", "contact": "Берковський Віктор Васильович (дир)", "address": "Дніпропетровська обл., Криничанський р-н, смт.Кринички", "notes": "", "label": "", "orgTitle": "", "lat": 48.372333, "lng": 34.4570895 },
-  { "name": "ФГ Агросфера+", "color": "#ef4444", "phone": "(097)9175436", "email": "jurijdz@ukr.net", "contact": "Дзисюк Юрій Олександрович (дир)", "address": "Миколаївська обл., Веселинівський р-н, Новосвітлівка", "notes": "", "label": "", "orgTitle": "", "lat": 47.1985921, "lng": 31.1850601 },
-  { "name": "ФГ Колос", "color": "#ef4444", "phone": "(098)7653903", "email": "maria_luzhbina@ukr.net", "contact": "Жук Ігор Віталійович (дир)", "address": "Харківська обл. Богодухівський р-н., смт. Золочів", "notes": "", "label": "", "orgTitle": "", "lat": 50.2690697, "lng": 35.9760431 },
-  { "name": "СФГ Стерх", "color": "#ef4444", "phone": "(050)4042707", "email": "vbut1967@ukr.net", "contact": "Шпирна Геннадій Іванович (дир)", "address": "Полтавська обл., Великобагачанський р-н, смт.Велика Багачка", "notes": "інж хотів повернути, але не повернув", "label": "", "orgTitle": "", "lat": 49.7893543, "lng": 33.7295435 },
-  { "name": "ТОВ Технолог", "color": "#ef4444", "phone": "(097)2137656", "email": "tatiana_dyma@ukr.net", "contact": "Новак Георгій Васильович (дир)", "address": "Одеська обл., Овідіопольський р-н, смт. Великодолинське", "notes": "", "label": "", "orgTitle": "", "lat": 46.342985, "lng": 30.5667777 },
-  { "name": "ТОВ АК Фактор", "color": "#ef4444", "phone": "(067)5236899", "email": "ak_factor@ukr.net", "contact": "Шередько Олександр Миколайович (дир)", "address": "Донецька обл., Великоновосілківський р-н, с.Олексіївка", "notes": "", "label": "", "orgTitle": "", "lat": 48.017947, "lng": 36.9468238 },
-  { "name": "ФОП Луценко М.В.", "color": "#ef4444", "phone": "(067)6323113", "email": "", "contact": "Луценко Михайло Віталійович (дир)", "address": "Дніпропетровська обл., м.Дніпро, вул.Новокримська, буд 4А, кв.131", "notes": "", "label": "", "orgTitle": "", "lat": 48.4230539, "lng": 35.0066259 },
-  { "name": "ФГ Вікінг", "color": "#ef4444", "phone": "(097)8404059", "email": "protasova_ap@ukr.net", "contact": "Кучма Юрій Леонідович (дир)", "address": "Дніпропетровська обл., Апостолівський р-н, с.Широчани", "notes": "", "label": "", "orgTitle": "", "lat": 47.8034461, "lng": 33.7288519 },
-  { "name": "ПП Баштанське квінт-ССД", "color": "#ef4444", "phone": "(067)5247946", "email": "oksana.berezen@gmail.com", "contact": "Ярошевський Сергій Орестович (дир)", "address": "Миколаївська обл., Баштанський р-н, с. Мар'янівка", "notes": "", "label": "", "orgTitle": "", "lat": 47.7709167, "lng": 30.4814062 },
-  { "name": "ФГ Агросвіт-СВ", "color": "#ef4444", "phone": "(066)8169737", "email": "agrosvit.sv@gmail.com", "contact": "Ведмідь Валерій Геннадійович (дир)", "address": "Полтавська обл., м.Глобине", "notes": "", "label": "", "orgTitle": "", "lat": 49.588267, "lng": 34.551417 },
-  { "name": "ФГ Бахус", "color": "#ef4444", "phone": "(067)6342479", "email": "vadim0676342422 @gmail.com", "contact": "Мірзаханов Вадим Камільйович (дир)", "address": "Дніпропетровська обл., Дніпровський р-н, м.Підгородне", "notes": "", "label": "", "orgTitle": "", "lat": 48.57248, "lng": 35.0869121 },
-  { "name": "ФГ Сібагро", "color": "#ef4444", "phone": "(098)2952451", "email": "vskripka61@ukr.net", "contact": "Сушко Даря'ї Миколаївна (дир)", "address": "Полтавська обл., Кобеляцький р-н, с.Вишневе", "notes": "", "label": "", "orgTitle": "", "lat": 49.2552579, "lng": 34.1686236 },
-  { "name": "ЕРАСТІВСЬКА ДОСЛІДНА СТАНЦІЯ ДУ ІЗК НААН UPPSALA", "color": "#ef4444", "phone": "(096)9640002", "email": "erastivska_ds@ukr.net", "contact": "Льоринець Федір Анатолійович (дир)", "address": "Дніпропетровська обл., Камʼянський  р-н, смт. Вишневе", "notes": "", "label": "", "orgTitle": "", "lat": 48.0299775, "lng": 33.8392988 },
-  { "name": "ТОВ Техімпульс КР", "color": "#ef4444", "phone": "(097)9155145", "email": "techimpulskr@ukr.net", "contact": "Салабаєв Данило Валерійович (дир)", "address": "Полтавська обл., м.Кременчук, вул.Героїв України, буд 14-Г", "notes": "", "label": "", "orgTitle": "", "lat": 49.5711051, "lng": 34.5006365 },
-  { "name": "ТОВ Гідравліка захід центр", "color": "#ef4444", "phone": "(095)0611689", "email": "", "contact": "Рудь Віталій Євгенович (дир)", "address": "м.Львів", "notes": "", "label": "", "orgTitle": "", "lat": 49.839683, "lng": 24.029717 },
-  { "name": "ФГ Карат", "color": "#ef4444", "phone": "(067)7647421", "email": "karat20fx@gmail.com", "contact": "Книш Віталій Васильович (дир)", "address": "Дніпропетровська обл., Новомосковський р-н, с.Миколаївка", "notes": "", "label": "", "orgTitle": "", "lat": 48.3585139, "lng": 34.679423 },
-  { "name": "ТОВ Деметра Н", "color": "#ef4444", "phone": "(066)6242587", "email": "2018demetra@gmail.com", "contact": "Хоружа Ніна Михайлівна (дир)", "address": "Кіровоградська обл., Долинський р-н, с.Широка Балка", "notes": "", "label": "", "orgTitle": "", "lat": 48.160268, "lng": 32.7273617 },
-  { "name": "ФОП Панічук С.А.", "color": "#ef4444", "phone": "(097)6761824", "email": "fop.panichyk@gmail.com", "contact": "Панічук Сергій Анатолійович (дир)", "address": "Миколаївська обл., Новобузький р-н, м.Новий Буг", "notes": "", "label": "", "orgTitle": "", "lat": 47.6968565, "lng": 32.5038537 },
-  { "name": "ФГ Алєксандров", "color": "#ef4444", "phone": "(066)2845968", "email": "dibrova.z555@gmail.com,  pivovarka060178@gmail.com", "contact": "Алєксандров Андрій Олександрович (дир)", "address": "Дніпропетровська обл., Дніпровський р-н, с.Діброва", "notes": "", "label": "", "orgTitle": "", "lat": 48.2890807, "lng": 35.1939831 },
-  { "name": "СФГ Родина", "color": "#ef4444", "phone": "(096)4552245", "email": "GSS29@ukr.net", "contact": "Гвалтюк Сергій Сергійович (дир)", "address": "Вінницька обл., Гайсинський р-н, с.Семенки", "notes": "", "label": "", "orgTitle": "", "lat": 48.8473487, "lng": 29.1074143 },
-  { "name": "ТОВ АФ Добробут", "color": "#ef4444", "phone": "(096)8040433", "email": "dobrobut@astarta.ua", "contact": "Таранушич Анатолій Олексійович (дир)", "address": "Полтавська обл., Полтавський р-н, м. Кобеляки", "notes": "", "label": "", "orgTitle": "", "lat": 49.1517927, "lng": 34.1953871 },
-  { "name": "ТОВ Компанія Агро-Голд", "color": "#ef4444", "phone": "(098)8514795", "email": "agro-gold21@ukr.net", "contact": "Вишиванюк Дмитро Михайлович (дир)", "address": "Івано-Франківська обл., Коломийський р-н, с. Фатовець", "notes": "ПЧ", "label": "", "orgTitle": "", "lat": 48.6270231, "lng": 25.1195217 },
-  { "name": "ФГ Пальок І.В.", "color": "#ef4444", "phone": "(098)3405447", "email": "paliok211@ukr.net", "contact": "Пальок Ярослав Володимирович (дир)", "address": "Дніпропетровська обл., Магдалинівський р-н, с.Личкове", "notes": "", "label": "", "orgTitle": "", "lat": 49.0918609, "lng": 35.1997052 },
-  { "name": "ТОВ Мічуріна+", "color": "#ef4444", "phone": "(050)3397000", "email": "gchumak@gmail.com", "contact": "Чумак Олександр Геннадійович (дир)", "address": "Одеська обл., Кодимський р-н, с.Писарівка", "notes": "проектування агрегату", "label": "", "orgTitle": "", "lat": 48.0531035, "lng": 29.0492359 },
-  { "name": "СФГ Клен", "color": "#ef4444", "phone": "(066)3630790", "email": "sfgklen2018@gmail.com", "contact": "Підюра Сергій Миколайович (дир)", "address": "Дніпропетровська обл., Криничанський р-н, с.Преображенка", "notes": "", "label": "", "orgTitle": "", "lat": 48.9569444, "lng": 34.6015304 },
-  { "name": "СФГ Олеко", "color": "#ef4444", "phone": "(096)4950707", "email": "svitlana_bux@ukr.net", "contact": "Козар Олександр Петрович (дир)", "address": "Полтавська обл., Кобеляцький р-н, с.Дабинівка", "notes": "", "label": "", "orgTitle": "", "lat": 49.0598815, "lng": 33.9196527 },
-  { "name": "ФГ Майгорове", "color": "#ef4444", "phone": "(067)6326651", "email": "danilyam@ukr.net", "contact": "Пшеничний Руслан Миколайович (дир)", "address": "Кіровоградська обл., Олександрійський р-н, смт Онуфріївка", "notes": "", "label": "", "orgTitle": "", "lat": 48.8998455, "lng": 33.4500992 },
-  { "name": "ПСП Фортуна-Агро", "color": "#ef4444", "phone": "(067)6340934", "email": "steblukandrej64@gmail.com", "contact": "Стеблюка Андрія Васильович (дир)", "address": "Дніпропетровська обл., Нікопольський р-н, село Китайгородка", "notes": "", "label": "", "orgTitle": "", "lat": 47.9098508, "lng": 34.5712639 },
-  { "name": "ТОВ Агро Віс", "color": "#ef4444", "phone": "(050)9099479", "email": "agrovis2017@gmail.com", "contact": "Болковенко Віктор Дмитрович (дир)", "address": "Харківська обл., Лозівський р-н, смт.Близнюки", "notes": "", "label": "", "orgTitle": "", "lat": 48.8568191, "lng": 36.5499896 },
-  { "name": "ФГ Степ", "color": "#ef4444", "phone": "(067)6309056", "email": "agro_step@ukr.net", "contact": "Скороход Сергій Олександрович (дир)", "address": "Кіровоградська обл., м. Олександрія,  смт. Олександрійське", "notes": "", "label": "", "orgTitle": "", "lat": 48.6632704, "lng": 33.0967875 },
-  { "name": "ТОВ Деметра-Велес", "color": "#ef4444", "phone": "(067)2347957", "email": "demetraveles1@gmail.com", "contact": "Руденко Олександр Іванович (дир)", "address": "Полтавська обл., Лохвицький р-н, с.Ісківці", "notes": "", "label": "", "orgTitle": "", "lat": 49.947844, "lng": 32.8029005 },
-  { "name": "СФГ Ранок", "color": "#ef4444", "phone": "(097)6293188", "email": "klampika@ukr.net", "contact": "Кузьменко Сергій Михайлович (дир)", "address": "Вінницька обл., Гайсинський р-н, село Губник", "notes": "", "label": "", "orgTitle": "", "lat": 48.6204595, "lng": 29.3277246 },
-  { "name": "ФОП Решняк В.Б.", "color": "#ef4444", "phone": "(050)7154061", "email": "357771@ukr.net", "contact": "Решняк Віктор Борисович (дир)", "address": "Кіровоградська обл., м.Кіровоград", "notes": "", "label": "", "orgTitle": "", "lat": 48.507933, "lng": 32.262317 },
-  { "name": "ФГ Агрофортуна", "color": "#ef4444", "phone": "(095)7178704", "email": "agrofortuna9@ukr.net", "contact": "Діжиченко Олександр Миколайович (дир)", "address": "Харківська обл., м.Валки", "notes": "", "label": "", "orgTitle": "", "lat": 50.0020127, "lng": 36.3073994 },
-  { "name": "ФОП Шинкаренко І.В.", "color": "#ef4444", "phone": "(096)0649233", "email": "", "contact": "Шинкаренко Іван Володимирович (дир)", "address": "Миколаївська обл., м.Первомайськ", "notes": "", "label": "", "orgTitle": "", "lat": 46.9660801, "lng": 32.003246 },
-  { "name": "ФОП Полянський І.Г.", "color": "#ef4444", "phone": "(096)1302222", "email": "ludmila303120@ukr.net", "contact": "Полянський Ігор Геннадійович (дир)", "address": "Дніпропетровська обл., Софіївський р-н, с. Криничувате", "notes": "", "label": "", "orgTitle": "", "lat": 47.9074551, "lng": 34.3238892 },
-  { "name": "ТОВ Логістика Україна", "color": "#ef4444", "phone": "(068)9872338", "email": "agrologistikaukraina@gmail.com", "contact": "Кашуба Тетяна Євгенівна (дир)", "address": "м.Харків, просп. Героїв Сталінграда, 45", "notes": "", "label": "", "orgTitle": "", "lat": 50.0020127, "lng": 36.3073994 },
-  { "name": "ТОВ НВФ Алькон", "color": "#ef4444", "phone": "(067)5318123", "email": "npf_alkon@alkon.pl.ua, tatyana.skochilo@gmail.com", "contact": "Штефан Олександр Іванович (дир)", "address": "Кіровоградська обл., Долинський р-н, м.Долинська", "notes": "", "label": "", "orgTitle": "", "lat": 48.1132559, "lng": 32.7658684 },
-  { "name": "СП Вікторія ТОВ", "color": "#ef4444", "phone": "(093)1551174", "email": "nata791910@ukr.net", "contact": "Калюжний Олег Степановича", "address": "Одеська обл., Одеський р-н., с. Созонівка", "notes": "", "label": "", "orgTitle": "", "lat": 46.7840299, "lng": 30.6666647 },
-  { "name": "СФГ Перлина С", "color": "#ef4444", "phone": "(066)0135830", "email": "perlyna.s@meta.ua", "contact": "Сливка Дмитро Олексійович (дир)", "address": "Одеська обл., Подільський р-н., с. Римарівка", "notes": "", "label": "", "orgTitle": "", "lat": 47.3407754, "lng": 29.4210177 },
-  { "name": "ФГ Рідна долина", "color": "#ef4444", "phone": "(095)1794079", "email": "oleksandr.slipchenko.1994@gmail.com", "contact": "Сліпченко Олександр Володимирович (дир)", "address": "Полтавська обл., Полтавський р-н, с.Орданівка", "notes": "", "label": "", "orgTitle": "", "lat": 49.8962645, "lng": 34.3419661 },
-  { "name": "СФГ Свитязь", "color": "#ef4444", "phone": "(066)9975571", "email": "", "contact": "Чумак Дмитро Валентинович (дир)", "address": "Дніпропетровська обл. Синельниківський р-н с.Майське", "notes": "", "label": "", "orgTitle": "", "lat": 48.4804876, "lng": 35.6117641 },
-  { "name": "ТОВ Сталконс", "color": "#ef4444", "phone": "(050)3276856", "email": "", "contact": "Міхалевич Павло Юрійович (дир)", "address": "Полтавська обл., м.Кременчук, вул.Сердюка Ігоря, буд. 8/18", "notes": "", "label": "", "orgTitle": "", "lat": 49.0673343, "lng": 33.4116743 }
-];
-
-
+const markers = []; // Store markers globally
 const icons = {
   address: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
   contact: '<svg class="popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
 };
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 function buildPopupHTML(c) {
   let html = '<div class="popup-header">';
@@ -92,22 +17,12 @@ function buildPopupHTML(c) {
   html += '</div>';
 
   html += '<div class="popup-body">';
-
   if (c.address) {
     html += '<div class="popup-row">' + icons.address + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
   }
-
-  html += '<div class="popup-coords">📍 ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + '</div>';
+  html += '<div class="popup-coords">📍 ' + (c.lat || 0).toFixed(5) + ', ' + (c.lng || 0).toFixed(5) + '</div>';
   html += '</div>';
-
   return html;
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 const map = new maplibregl.Map({
@@ -128,95 +43,44 @@ const map = new maplibregl.Map({
   zoom: 5
 });
 
-// Store markers for search functionality
-const markers = [];
+// Ensure clients are loaded; inject clients_array.js if needed
+function ensureClientsLoaded() {
+  return new Promise(resolve => {
+    if (window.clients && Array.isArray(window.clients)) return resolve(window.clients);
+    const script = document.createElement('script');
+    script.src = 'clients_array.js';
+    script.onload = () => resolve(window.clients || []);
+    script.onerror = () => resolve(window.clients || []);
+    document.head.appendChild(script);
+  });
+}
 
 map.on('load', () => {
-  if (clients.length === 0) return;
-  const bounds = new maplibregl.LngLatBounds();
-  clients.forEach(c => bounds.extend([c.lng, c.lat]));
-  map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+  ensureClientsLoaded().then(clients => {
+    if (!clients || clients.length === 0) return;
+    const bounds = new maplibregl.LngLatBounds();
+    clients.forEach(c => bounds.extend([c.lng, c.lat]));
+    map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
 
-  clients.forEach(c => {
-    const el = document.createElement('div');
-    el.className = 'marker';
-    el.style.backgroundColor = c.color || '#ef4444';
+    clients.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'marker';
+      el.style.backgroundColor = c.color || '#ef4444';
 
-    const popup = new maplibregl.Popup({ offset: 15, maxWidth: '320px' })
-      .setHTML(buildPopupHTML(c));
+      const popup = new maplibregl.Popup({ offset: 15, maxWidth: '320px' })
+        .setHTML(buildPopupHTML(c));
 
-    const marker = new maplibregl.Marker({
-      element: el,
-      anchor: 'center'
-    })
-      .setLngLat([c.lng, c.lat])
-      .setPopup(popup)
-      .addTo(map);
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([c.lng, c.lat])
+        .setPopup(popup)
+        .addTo(map);
 
-    // Store marker with client data for search
-    markers.push({ marker, client: c });
-  });
-});
-
-// Search functionality
-const searchInput = document.getElementById('search-input');
-const searchResults = document.getElementById('search-results');
-
-function searchClients(query) {
-  if (!query || query.trim() === '') {
-    return [];
-  }
-
-  const lowerQuery = query.toLowerCase();
-  return clients.filter(c =>
-    c.name.toLowerCase().includes(lowerQuery) ||
-    (c.address && c.address.toLowerCase().includes(lowerQuery)) ||
-    (c.contact && c.contact.toLowerCase().includes(lowerQuery))
-  );
-}
-
-function displaySearchResults(results) {
-  if (results.length === 0) {
-    searchResults.innerHTML = '<div class="search-no-results">Нічого не знайдено</div>';
-    searchResults.classList.add('active');
-    return;
-  }
-
-  searchResults.innerHTML = results.map(c => `
-    <div class="search-result-item" data-lat="${c.lat}" data-lng="${c.lng}" data-name="${escapeHtml(c.name)}">
-      <div class="search-result-name">${escapeHtml(c.name)}</div>
-      <div class="search-result-address">${escapeHtml(c.address || '')}</div>
-    </div>
-  `).join('');
-
-  searchResults.classList.add('active');
-
-  // Add click handlers to results
-  document.querySelectorAll('.search-result-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const lat = parseFloat(item.dataset.lat);
-      const lng = parseFloat(item.dataset.lng);
-      const name = item.dataset.name;
-
-      // Fly to location
-      map.flyTo({
-        center: [lng, lat],
-        zoom: 12,
-        duration: 1500
-      });
-
-      // Find and open the marker popup
-      const markerData = markers.find(m => m.client.name === name);
-      if (markerData) {
-        markerData.marker.togglePopup();
-      }
-
-      // Clear search
-      searchInput.value = '';
-      searchResults.classList.remove('active');
+      // record marker index on client for reliable linking from search results
+      c._markerIndex = markers.length;
+      markers.push({ marker, client: c });
     });
   });
-}
+});
 
 searchInput.addEventListener('input', (e) => {
   const query = e.target.value;
@@ -225,9 +89,46 @@ searchInput.addEventListener('input', (e) => {
     return;
   }
 
-  const results = searchClients(query);
-  displaySearchResults(results);
+  ensureClientsLoaded().then(() => {
+    const results = (window.clients && window.clients.length) ? searchClients(query) : [];
+    displaySearchResults(results);
+  });
 });
+
+function searchClients(q) {
+  const source = window.clients || [];
+  const ql = q.toLowerCase();
+  return source.filter(c => {
+    return (c.name && c.name.toLowerCase().includes(ql)) ||
+      (c.address && c.address.toLowerCase().includes(ql)) ||
+      (c.contact && c.contact.toLowerCase().includes(ql)) ||
+      (c.phone && c.phone.toLowerCase().includes(ql)) ||
+      (c.email && c.email.toLowerCase().includes(ql));
+  }).slice(0, 12);
+}
+
+function displaySearchResults(results) {
+  searchResults.innerHTML = '';
+  if (!results || results.length === 0) { searchResults.classList.remove('active'); return; }
+  results.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'search-result';
+    div.dataset.index = (typeof r._markerIndex !== 'undefined') ? r._markerIndex : -1;
+    div.innerHTML = '<div class="result-name">' + escapeHtml(r.name) + '</div>' +
+      '<div class="result-address">' + escapeHtml(r.address || '') + '</div>';
+    div.addEventListener('click', () => {
+      const idx = Number(div.dataset.index);
+      const entry = markers[idx];
+      if (entry) {
+        entry.marker.togglePopup();
+        map.flyTo({ center: [entry.client.lng, entry.client.lat], zoom: 12 });
+      }
+      searchResults.classList.remove('active');
+    });
+    searchResults.appendChild(div);
+  });
+  searchResults.classList.add('active');
+}
 
 // Close search results when clicking outside
 document.addEventListener('mousedown', (e) => {
