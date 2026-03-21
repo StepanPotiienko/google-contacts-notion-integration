@@ -121,20 +121,49 @@ async def fetch_notion_data(api_key, database_id):
     return {"results": all_results}
 
 
+_UA_ADDRESS_RE = re.compile(
+    r"(обл\.|р-н|\bобласть\b|\bрайон\b|\bУкраїна\b|\bукраїна\b)",
+    re.IGNORECASE,
+)
+# Known non-Ukrainian countries by Cyrillic/Latin name — if any match, address is NOT Ukrainian
+_NON_UA_COUNTRY_RE = re.compile(
+    r"\b(Грузія|Грузия|Georgia|Молдова|Молдавія|Moldova|Білорусь|Беларусь|Belarus|Казахстан|Kazakhstan|Польща|Польша|Росія|Россия|Russia|\bRU\b|Узбекистан|Uzbekistan|Азербайджан|вірменія|Вірменія|Armenia|Azerbaijan)\b",
+    re.IGNORECASE,
+)
+_CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+
+
+def _is_ukrainian_address(addr: str) -> bool:
+    """Return True if the address is likely Ukrainian.
+
+    An address is considered Ukrainian when it contains Cyrillic script AND
+    at least one Ukrainian-specific geographic marker (обл., р-н, область,
+    район, Україна) AND does NOT mention a known non-Ukrainian country.
+    """
+    if not _CYRILLIC_RE.search(addr):
+        return False  # No Cyrillic at all — definitely not Ukrainian
+    if _NON_UA_COUNTRY_RE.search(addr):
+        return False  # Explicitly references a non-Ukrainian country
+    return bool(_UA_ADDRESS_RE.search(addr))
+
+
 def geocode_location(location_str: str):
     """
     Geocode a location string to lat/lng coordinates.
     Parses Ukrainian address format and uses OpenStreetMap Nominatim API.
+    Handles non-Ukrainian addresses (e.g. Georgian, Moldovan) without country restriction.
 
     Args:
         location_str: Location string (e.g., "Київ", "Полтавська обл.,
-        Лубенський р-н, с. Богодарівка")
+        Лубенський р-н, с. Богодарівка", "Tbilisi, Georgia")
 
     Returns:
         dict with 'lat' and 'lng' keys, or None if geocoding fails
     """
     if not location_str or not location_str.strip():
         return None
+
+    is_ua = _is_ukrainian_address(location_str)
 
     # Parse Ukrainian address format
     parts = [p.strip() for p in location_str.split(",")]
@@ -168,13 +197,14 @@ def geocode_location(location_str: str):
         try:
             # OpenStreetMap Nominatim API
             url = "https://nominatim.openstreetmap.org/search"
-            params = {
+            params: dict = {
                 "q": query,
                 "format": "json",
                 "limit": 1,
-                "countrycodes": "ua",  # Limit to Ukraine
                 "addressdetails": 1,
             }
+            if is_ua:
+                params["countrycodes"] = "ua"  # Limit to Ukraine only for UA addresses
             headers = {"User-Agent": "NotionMapWidget/1.0"}
 
             response = requests.get(url, params=params, headers=headers, timeout=10)
@@ -211,19 +241,27 @@ def _parse_ukrainian_address(addr: str) -> dict:
         p_lower = p.lower()
 
         if "обл." in p_lower or "область" in p_lower:
-            cleaned = re.sub(r"\s*(обл\.?|область)\s*$", "", p, flags=re.IGNORECASE).strip()
+            cleaned = re.sub(
+                r"\s*(обл\.?|область)\s*$", "", p, flags=re.IGNORECASE
+            ).strip()
             result["oblast"] = cleaned
         elif "р-н" in p_lower or ("район" in p_lower and "обл" not in p_lower):
-            cleaned = re.sub(r"\s*(р-н\.?|район)\s*$", "", p, flags=re.IGNORECASE).strip()
+            cleaned = re.sub(
+                r"\s*(р-н\.?|район)\s*$", "", p, flags=re.IGNORECASE
+            ).strip()
             result["raion"] = cleaned
         elif re.match(r"^с\.\s*", p):
             result["settlement"] = re.sub(r"^с\.\s*", "", p).strip()
         elif re.match(r"^село\s+", p, re.IGNORECASE):
-            result["settlement"] = re.sub(r"^село\s+", "", p, flags=re.IGNORECASE).strip()
+            result["settlement"] = re.sub(
+                r"^село\s+", "", p, flags=re.IGNORECASE
+            ).strip()
         elif re.match(r"^м\.\s*", p):
             result["settlement"] = re.sub(r"^м\.\s*", "", p).strip()
         elif re.match(r"^місто\s+", p, re.IGNORECASE):
-            result["settlement"] = re.sub(r"^місто\s+", "", p, flags=re.IGNORECASE).strip()
+            result["settlement"] = re.sub(
+                r"^місто\s+", "", p, flags=re.IGNORECASE
+            ).strip()
         elif re.match(r"^смт\.?\s*", p):
             result["settlement"] = re.sub(r"^смт\.?\s*", "", p).strip()
         else:
@@ -333,6 +371,9 @@ def batch_geocode(
         if cached:
             return addr, cached
 
+        # Detect address language to decide whether to restrict geocoding to Ukraine
+        is_ua = _is_ukrainian_address(addr)
+
         # Parse Ukrainian address into components for smarter queries
         parsed = _parse_ukrainian_address(addr)
         settlement = parsed.get("settlement", "")
@@ -362,10 +403,25 @@ def batch_geocode(
             for part in parts:
                 cleaned = part
                 # Remove suffixes (обл., р-н)
-                cleaned = re.sub(r"\s+(обл\.?|р-н\.?|район|область)\s*$", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(
+                    r"\s+(обл\.?|р-н\.?|район|область)\s*$",
+                    "",
+                    cleaned,
+                    flags=re.IGNORECASE,
+                )
                 # Remove prefixes — abbreviations with period, plus full words and hyphenated forms
-                cleaned = re.sub(r"^(с|м|смт|вул|пров|просп|бул|пл)\.\s*", "", cleaned, flags=re.IGNORECASE)
-                cleaned = re.sub(r"^(провулок|проспект|вулиця|місто|село|площа|бульвар)\s+", "", cleaned, flags=re.IGNORECASE)
+                cleaned = re.sub(
+                    r"^(с|м|смт|вул|пров|просп|бул|пл)\.\s*",
+                    "",
+                    cleaned,
+                    flags=re.IGNORECASE,
+                )
+                cleaned = re.sub(
+                    r"^(провулок|проспект|вулиця|місто|село|площа|бульвар)\s+",
+                    "",
+                    cleaned,
+                    flags=re.IGNORECASE,
+                )
                 cleaned = re.sub(r"^пр-т\s+", "", cleaned, flags=re.IGNORECASE)
                 cleaned = cleaned.strip()
                 if not cleaned:
@@ -387,11 +443,20 @@ def batch_geocode(
 
         # 2. Settlement-level queries as fallback (less specific)
         if settlement:
-            if oblast:
-                queries.append(f"{settlement}, {oblast} область, Україна")
-            if raion and oblast:
-                queries.append(f"{settlement}, {raion} район, {oblast} область")
-            queries.append(f"{settlement}, Україна")
+            if is_ua:
+                if oblast:
+                    queries.append(f"{settlement}, {oblast} область, Україна")
+                if raion and oblast:
+                    queries.append(f"{settlement}, {raion} район, {oblast} область")
+                queries.append(f"{settlement}, Україна")
+            else:
+                # Non-Ukrainian: use original address as-is (most complete) plus bare settlement
+                # Don't just use `settlement` because _parse_ukrainian_address may return the
+                # country name instead of the city for foreign addresses (e.g. "Грузія" for
+                # "м. Тбілісі, Грузія").  The original `addr` is already in queries[0] so
+                # only add settlement as an additional fallback if it differs.
+                if settlement != addr and settlement not in queries:
+                    queries.append(settlement)
 
         # Deduplicate queries while preserving order
         unique_queries = []
@@ -423,14 +488,17 @@ def batch_geocode(
                 # Fall back to Nominatim if Google didn't return results
                 if not coords:
                     acquire_token()
-                    params = {
+                    nominatim_params: dict = {
                         "q": q,
                         "format": "json",
                         "limit": 1,
-                        "countrycodes": "ua",
                         "addressdetails": 1,
                     }
-                    resp = session.get(url_nominatim, params=params, timeout=10)
+                    if is_ua:
+                        nominatim_params["countrycodes"] = "ua"
+                    resp = session.get(
+                        url_nominatim, params=nominatim_params, timeout=10
+                    )
                     resp.raise_for_status()
                     data = resp.json()
                     if data and len(data) > 0:
@@ -451,17 +519,18 @@ def batch_geocode(
                 # If error occurs on one variation, continue to next
                 continue
 
-        # Last resort: structured Nominatim query (most reliable for Ukrainian)
+        # Last resort: structured Nominatim query (most reliable for Ukrainian / any address)
         if settlement:
             acquire_token()
             try:
-                struct_params = {
+                struct_params: dict = {
                     "format": "json",
                     "limit": 1,
-                    "countrycodes": "ua",
                     "city": settlement,
                 }
-                if oblast:
+                if is_ua:
+                    struct_params["countrycodes"] = "ua"
+                if oblast and is_ua:
                     struct_params["state"] = oblast + " область"
                 resp = session.get(url_nominatim, params=struct_params, timeout=10)
                 resp.raise_for_status()

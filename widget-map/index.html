@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Client Map</title>
+    <title>Agropride Client Map</title>
     <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
     <style>
         @font-face {
-            font-family: 'Rubik One Local';
+            font-family: 'Rubik Local';
             src: url('Rubik.ttf') format('truetype');
             font-style: normal;
             font-display: swap;
@@ -34,67 +34,100 @@
         }
 
         #controls {
-            position: absolute;
-            top: 14px;
-            left: 14px;
+            position: fixed;
+            top: 1vh;
+            left: 1vw;
             z-index: 10001;
-            background: rgba(255, 255, 255, 0.98);
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(15, 23, 42, 0.04);
-            box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+            background: #434343;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #dd3a28;
+            box-shadow: 0 2px 8px rgba(221, 58, 40, 0.08);
             display: flex;
-            gap: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
             align-items: center;
+            max-width: calc(100vw - 2vw - 20px);
         }
 
         .search-wrapper {
-            position: relative;
             display: flex;
             align-items: center;
-            min-width: 260px;
+            border-radius: 8px;
+            border: 1px solid #dd3a28;
+            box-sizing: border-box;
+            padding-left: 8px;
+            gap: 8px;
+            height: 48px;
+        }
+
+        .search-input-row {
+            display: flex;
+            align-items: center;
+            height: 48px;
+            position: relative;
+            flex: 1;
         }
 
         .search-icon {
-            position: absolute;
-            left: 10px;
-            width: 16px;
-            height: 16px;
-            color: #6b7280;
+            height: 18px;
+            color: #dd3a28;
             pointer-events: none;
         }
 
         #search {
+            height: 48px;
             width: 100%;
-            padding: 8px 36px 8px 34px;
-            border-radius: 10px;
-            border: 1px solid #e6eef8;
+            border: none;
             outline: none;
-            font-size: 14px;
-            box-shadow: inset 0 1px 4px rgba(16, 24, 40, 0.03);
-            transition: box-shadow 0.15s, border-color 0.15s;
+            font-size: 1rem;
+            color: #fff;
             background: transparent;
+            border-radius: 8px 0 0 8px;
+            padding-right: 44px;
+        }
+
+        #search::-webkit-search-cancel-button {
+            display: none;
+        }
+
+        #search::-ms-clear {
+            display: none;
+        }
+
+        #search::-moz-search-clear-button {
+            display: none;
+        }
+
+        #search::-o-search-clear-button {
+            display: none;
         }
 
         #search:focus {
-            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
-            border-color: rgba(37, 99, 235, 0.6);
+            border-color: #dd3a28;
         }
 
         #clear-btn {
             position: absolute;
-            right: 8px;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 48px;
+            display: none;
             background: transparent;
             border: none;
-            font-size: 16px;
-            color: #9ca3af;
+            font-size: 24px;
+            line-height: 1;
+            color: #fff;
             cursor: pointer;
-            padding: 4px;
-            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0 8px 8px 0;
         }
 
         #clear-btn:hover {
-            color: #374151;
+            color: #dd3a28;
         }
 
         .suggestions {
@@ -102,10 +135,10 @@
             top: calc(100% + 8px);
             left: 0;
             right: 0;
-            background: white;
-            border: 1px solid #e6eef8;
-            box-shadow: 0 6px 20px rgba(2, 6, 23, 0.12);
-            border-radius: 10px;
+            background: #434343;
+            border: 1px solid #dd3a28;
+            box-shadow: 0 6px 20px rgba(221, 58, 40, 0.12);
+            border-radius: 8px;
             max-height: 220px;
             overflow: auto;
             z-index: 10002;
@@ -115,12 +148,13 @@
         .suggestion-item {
             padding: 10px 12px;
             font-size: 14px;
-            color: #111827;
+            color: #fff;
             cursor: pointer;
         }
 
         .suggestion-item:hover {
-            background: #f8fafc;
+            background: #dd3a28;
+            color: #fff;
         }
 
         .maplibregl-popup-content {
@@ -223,6 +257,84 @@
             padding-top: 8px;
             border-top: 1px solid #e5e7eb;
         }
+
+
+        .filter-wrapper {
+            display: flex;
+            gap: 8px;
+            flex: 1 1 auto;
+        }
+
+        .filter-select {
+            height: 48px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'Rubik', sans-serif;
+            color: #fff;
+            background: #525252;
+            font-weight: 700;
+            box-shadow: none;
+            appearance: none;
+            border: none;
+            outline: none;
+            padding: 0 18px;
+            flex: 1 1 0;
+            min-width: 100px;
+        }
+
+        .filter-select:focus {
+            background: #434343;
+            color: #fff;
+        }
+
+        .filter-select option {
+            color: #fff;
+            background: #525252;
+            font-family: 'Rubik', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            padding: 12px 18px;
+            border-radius: 10px;
+        }
+
+        /* Custom scrollbar for dropdown */
+        select.filter-select::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        select.filter-select::-webkit-scrollbar-thumb {
+            background: #dd3a28;
+            border-radius: 8px;
+        }
+
+        #reset-view-btn {
+            flex: 0 0 auto;
+            height: 48px;
+            padding: 0 16px;
+            background: #525252;
+            border: 1px solid #dd3a28;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+            font-family: 'Rubik', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        #reset-view-btn:hover {
+            background: #dd3a28;
+            color: #fff;
+        }
+
+        #reset-view-btn svg {
+            flex-shrink: 0;
+        }
     </style>
 </head>
 
@@ -233,407 +345,420 @@
                 <circle cx="11" cy="11" r="7" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input id="search" type="search" placeholder="Пошук..." autocomplete="off" />
-            <button id="clear-btn" aria-label="Clear search">×</button>
-            <div id="suggestions" class="suggestions" role="listbox"></div>
+            <div class="search-input-row">
+                <input id="search" type="search" placeholder="Пошук..." autocomplete="on" />
+                <button id="clear-btn" aria-label="Clear search">×</button>
+                <div id="suggestions" class="suggestions" role="listbox"></div>
+            </div>
         </div>
+        <div class="filter-wrapper">
+            <select id="country-filter" class="filter-select">
+                <option value="">Країна</option>
+                <option value="Україна">Україна</option>
+                <option value="Грузія">Грузія</option>
+            </select>
+            <select id="oblast-filter" class="filter-select">
+                <option value="">Область</option>
+                <option value="Вінницька">Вінницька</option>
+                <option value="Волинська">Волинська</option>
+                <option value="Дніпропетровська">Дніпропетровська</option>
+                <option value="Донецька">Донецька</option>
+                <option value="Житомирська">Житомирська</option>
+                <option value="Закарпатська">Закарпатська</option>
+                <option value="Запорізька">Запорізька</option>
+                <option value="Івано-Франківська">Івано-Франківська</option>
+                <option value="Київська">Київська</option>
+                <option value="Кіровоградська">Кіровоградська</option>
+                <option value="Луганська">Луганська</option>
+                <option value="Львівська">Львівська</option>
+                <option value="Миколаївська">Миколаївська</option>
+                <option value="Одеська">Одеська</option>
+                <option value="Полтавська">Полтавська</option>
+                <option value="Рівненська">Рівненська</option>
+                <option value="Сумська">Сумська</option>
+                <option value="Тернопільська">Тернопільська</option>
+                <option value="Харківська">Харківська</option>
+                <option value="Херсонська">Херсонська</option>
+                <option value="Хмельницька">Хмельницька</option>
+                <option value="Черкаська">Черкаська</option>
+                <option value="Чернівецька">Чернівецька</option>
+                <option value="Чернігівська">Чернігівська</option>
+                <option value="м.Київ">м.Київ</option>
+                <option value="м.Севастополь">м.Севастополь</option>
+                <option value="АР Крим">АР Крим</option>
+            </select>
+        </div>
+        <button id="reset-view-btn" title="Скинути вигляд">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+            </svg>
+            Скинути
+        </button>
     </div>
     <div id="map"></div>
     <script>
         fetch('clients.json')
-          .then(r => r.json())
-          .then(clients => {
+            .then(r => r.json())
+            .then(clients => {
 
 
-        function clientsToGeoJSON(list) {
-            return {
-                type: 'FeatureCollection',
-                features: list
-                    .filter(function (c) { return c.lat != null && c.lng != null; })
-                    .map(function (c, i) {
-                        return {
-                            type: 'Feature',
-                            geometry: {
-                                type: 'Point',
-                                coordinates: [c.lng, c.lat]
-                            },
-                            properties: {
-                                _index: i,
-                                name: c.name || '',
-                                color: c.color || '#ef4444',
-                                phone: c.phone || '',
-                                email: c.email || '',
-                                contact: c.contact || '',
-                                address: c.address || '',
-                                notes: c.notes || '',
-                                label: c.label || '',
-                                orgTitle: c.orgTitle || ''
-                            }
-                        };
-                    })
-            };
-        }
-
-        function buildPopupHTML(clientsAtLocation) {
-            var html = '<div style="max-height:300px; overflow-y:auto;">';
-
-            clientsAtLocation.forEach(function (c, index) {
-                html += '<div' + (index > 0 ? ' style="border-top: 1px solid #efefef; padding-top: 12px; margin-top: 12px;"' : '') + '>';
-
-                html += '<div class="popup-header">';
-                var headerText = clientsAtLocation.length > 1 ? '(' + (index + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
-                html += '<div class="popup-name" style="font-weight:600; font-size:14px; margin-bottom:4px;">' + headerText + '</div>';
-
-                if (c.label) {
-                    html += '<div class="popup-label" style="background-color:' + (c.color || '#ef4444') + '; font-size:10px; padding:2px 6px; border-radius:4px; color:white; display:inline-block; margin-bottom:8px;">' + escapeHtml(c.label) + '</div>';
-                }
-                html += '</div>';
-
-                html += '<div class="popup-body" style="font-size:13px; color:#374151;">';
-
-                if (c.address) {
-                    html += '<div class="popup-row" style="display:flex; align-items:start; gap:6px; margin-bottom:4px;">' +
-                        '<span style="font-weight:500;">&#128205;</span> ' +
-                        '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-                }
-
-                if (c.notes) {
-                    html += '<div class="popup-notes" style="background:#f3f4f6; padding:6px; border-radius:4px; margin-top:6px; font-style:italic; font-size:12px;">' + escapeHtml(c.notes) + '</div>';
-                }
-
-                html += '</div>';
-                html += '</div>';
-            });
-
-            html += '</div>';
-            return html;
-        }
-
-        function escapeHtml(text) {
-            if (!text) return '';
-            var div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        var fullGeoJSON = clientsToGeoJSON(clients);
-
-        var map = new maplibregl.Map({
-            container: 'map',
-            style: {
-                version: 8,
-                glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-                sources: {
-                    osm: {
-                        type: 'raster',
-                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                        tileSize: 256,
-                        attribution: '&copy; OpenStreetMap contributors'
-                    }
-                },
-                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
-            },
-            center: [30.5241361, 50.4500336],
-            zoom: 5
-        });
-
-        map.on('load', function () {
-            if (clients.length === 0) return;
-
-            // Add clustered GeoJSON source
-            map.addSource('clients', {
-                type: 'geojson',
-                data: fullGeoJSON,
-                cluster: true,
-                clusterMaxZoom: 24,
-                clusterRadius: 50
-            });
-
-            // Cluster circles — sized and colored by point count
-            map.addLayer({
-                id: 'clusters',
-                type: 'circle',
-                source: 'clients',
-                filter: ['has', 'point_count'],
-                paint: {
-                    'circle-color': [
-                        'step',
-                        ['get', 'point_count'],
-                        '#f87171',
-                        10, '#ef4444',
-                        30, '#dc2626',
-                        100, '#b91c1c'
-                    ],
-                    'circle-radius': [
-                        'step',
-                        ['get', 'point_count'],
-                        18,
-                        10, 24,
-                        30, 30,
-                        100, 36
-                    ],
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff'
-                }
-            });
-
-            // Cluster count labels
-            map.addLayer({
-                id: 'cluster-count',
-                type: 'symbol',
-                source: 'clients',
-                filter: ['has', 'point_count'],
-                layout: {
-                    'text-field': ['get', 'point_count_abbreviated'],
-                    'text-font': ['Open Sans Bold'],
-                    'text-size': 13,
-                    'text-allow-overlap': true
-                },
-                paint: {
-                    'text-color': '#ffffff'
-                }
-            });
-
-            // Individual (unclustered) points
-            map.addLayer({
-                id: 'unclustered-point',
-                type: 'circle',
-                source: 'clients',
-                filter: ['!', ['has', 'point_count']],
-                paint: {
-                    'circle-color': '#ef4444',
-                    'circle-radius': 8,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff'
-                }
-            });
-
-            // Click on cluster: zoom in or show popup at max zoom
-            map.on('click', 'clusters', function (e) {
-                var features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
-                if (!features.length) return;
-
-                var clusterId = features[0].properties.cluster_id;
-                var pointCount = features[0].properties.point_count;
-                var clusterCoords = features[0].geometry.coordinates;
-                var source = map.getSource('clients');
-
-                source.getClusterExpansionZoom(clusterId, function (err, expansionZoom) {
-                    if (err) return;
-
-                    if (expansionZoom > 20 || expansionZoom <= map.getZoom()) {
-                        // At max zoom — show all leaves in a popup
-                        source.getClusterLeaves(clusterId, Math.min(pointCount, 50), 0, function (err2, leaves) {
-                            if (err2 || !leaves) return;
-
-                            var popupClients = leaves.map(function (leaf) {
+                function clientsToGeoJSON(list) {
+                    return {
+                        type: 'FeatureCollection',
+                        features: list
+                            .filter(function (c) { return c.lat != null && c.lng != null; })
+                            .map(function (c, i) {
                                 return {
-                                    name: leaf.properties.name,
-                                    color: leaf.properties.color,
-                                    phone: leaf.properties.phone,
-                                    email: leaf.properties.email,
-                                    contact: leaf.properties.contact,
-                                    address: leaf.properties.address,
-                                    notes: leaf.properties.notes,
-                                    label: leaf.properties.label,
-                                    orgTitle: leaf.properties.orgTitle
+                                    type: 'Feature',
+                                    geometry: {
+                                        type: 'Point',
+                                        coordinates: [c.lng, c.lat]
+                                    },
+                                    properties: {
+                                        _index: i,
+                                        name: c.name || '',
+                                        color: c.color || '#ef4444',
+                                        phone: c.phone || '',
+                                        email: c.email || '',
+                                        contact: c.contact || '',
+                                        address: c.address || '',
+                                        notes: c.notes || '',
+                                        label: c.label || '',
+                                        orgTitle: c.orgTitle || ''
+                                    }
                                 };
-                            });
-
-                            new maplibregl.Popup({ maxWidth: '360px' })
-                                .setLngLat(clusterCoords)
-                                .setHTML(buildPopupHTML(popupClients))
-                                .addTo(map);
-                        });
-                    } else {
-                        map.easeTo({
-                            center: clusterCoords,
-                            zoom: expansionZoom
-                        });
-                    }
-                });
-            });
-
-            // Click on individual point: show popup
-            map.on('click', 'unclustered-point', function (e) {
-                var feature = e.features[0];
-                var coords = feature.geometry.coordinates.slice();
-                var props = feature.properties;
-
-                // Find all clients at the exact same coordinate (co-located)
-                var colocated = clients.filter(function (c) {
-                    return c.lat != null && c.lng != null &&
-                        c.lat.toFixed(6) === coords[1].toFixed(6) &&
-                        c.lng.toFixed(6) === coords[0].toFixed(6);
-                });
-
-                var popupClients = colocated.length > 0 ? colocated : [{
-                    name: props.name,
-                    color: props.color,
-                    phone: props.phone,
-                    email: props.email,
-                    contact: props.contact,
-                    address: props.address,
-                    notes: props.notes,
-                    label: props.label,
-                    orgTitle: props.orgTitle
-                }];
-
-                // Handle antimeridian wrapping
-                while (Math.abs(e.lngLat.lng - coords[0]) > 180) {
-                    coords[0] += e.lngLat.lng > coords[0] ? 360 : -360;
+                            })
+                    };
                 }
 
-                new maplibregl.Popup({ maxWidth: '320px' })
-                    .setLngLat(coords)
-                    .setHTML(buildPopupHTML(popupClients))
-                    .addTo(map);
-            });
+                function buildPopupHTML(clientsAtLocation) {
+                    var html = '<div style="max-height:300px; overflow-y:auto;">';
 
-            // Cursor styling
-            map.on('mouseenter', 'clusters', function () {
-                map.getCanvas().style.cursor = 'pointer';
-            });
-            map.on('mouseleave', 'clusters', function () {
-                map.getCanvas().style.cursor = '';
-            });
-            map.on('mouseenter', 'unclustered-point', function () {
-                map.getCanvas().style.cursor = 'pointer';
-            });
-            map.on('mouseleave', 'unclustered-point', function () {
-                map.getCanvas().style.cursor = '';
-            });
+                    clientsAtLocation.forEach(function (c, index) {
+                        html += '<div' + (index > 0 ? ' style="border-top: 1px solid #efefef; padding-top: 12px; margin-top: 12px;"' : '') + '>';
 
-            // Fit bounds to show all markers
-            var bounds = new maplibregl.LngLatBounds();
-            clients.forEach(function (c) {
-                if (c.lat != null && c.lng != null) {
-                    bounds.extend([c.lng, c.lat]);
-                }
-            });
-            if (!bounds.isEmpty()) {
-                map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
-            }
+                        html += '<div class="popup-header">';
+                        var headerText = clientsAtLocation.length > 1 ? '(' + (index + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
+                        html += '<div class="popup-name" style="font-weight:600; font-size:14px; margin-bottom:4px;">' + headerText + '</div>';
 
-            // Search functionality
-            var searchInput = document.getElementById('search');
-            var searchInputWrapper = document.querySelector('.search-wrapper');
-            var suggestionsBox = document.getElementById('suggestions');
-            var clearBtn = document.getElementById('clear-btn');
-            var debounceTimer = null;
+                        if (c.label) {
+                            html += '<div class="popup-label" style="background-color:' + (c.color || '#ef4444') + '; font-size:10px; padding:2px 6px; border-radius:4px; color:white; display:inline-block; margin-bottom:8px;">' + escapeHtml(c.label) + '</div>';
+                        }
+                        html += '</div>';
 
-            function filterMapByQuery(q) {
-                var ql = (q || '').trim().toLowerCase();
+                        html += '<div class="popup-body" style="font-size:13px; color:#374151;">';
 
-                if (!ql) {
-                    map.getSource('clients').setData(fullGeoJSON);
-                    return;
-                }
+                        if (c.address) {
+                            html += '<div class="popup-row" style="display:flex; align-items:start; gap:6px; margin-bottom:4px;">' +
+                                '<span style="font-weight:500;">&#128205;</span> ' +
+                                '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
+                        }
 
-                var matching = clients.filter(function (c) {
-                    var text = [c.name, c.address, c.contact, c.phone, c.email]
-                        .filter(Boolean)
-                        .join(' ')
-                        .toLowerCase();
-                    return text.indexOf(ql) !== -1;
-                });
+                        if (c.notes) {
+                            html += '<div class="popup-notes" style="background:#f3f4f6; padding:6px; border-radius:4px; margin-top:6px; font-style:italic; font-size:12px;">' + escapeHtml(c.notes) + '</div>';
+                        }
 
-                map.getSource('clients').setData(clientsToGeoJSON(matching));
-            }
-
-            function showSuggestions(q) {
-                var ql = (q || '').trim().toLowerCase();
-                suggestionsBox.innerHTML = '';
-
-                if (!ql) {
-                    suggestionsBox.style.display = 'none';
-                    return;
-                }
-
-                var matches = clients.filter(function (c) {
-                    var text = [c.name, c.address, c.contact, c.phone]
-                        .filter(Boolean)
-                        .join(' ')
-                        .toLowerCase();
-                    return text.indexOf(ql) !== -1;
-                }).slice(0, 10);
-
-                if (matches.length === 0) {
-                    suggestionsBox.style.display = 'none';
-                    return;
-                }
-
-                matches.forEach(function (client) {
-                    var div = document.createElement('div');
-                    div.className = 'suggestion-item';
-                    div.textContent = client.name + (client.address ? ' (' + client.address + ')' : '');
-
-                    div.addEventListener('click', function () {
-                        // Reset filter to show all
-                        map.getSource('clients').setData(fullGeoJSON);
-
-                        // Fly to client
-                        map.flyTo({
-                            center: [client.lng, client.lat],
-                            zoom: Math.max(map.getZoom(), 14),
-                            essential: true
-                        });
-
-                        // Show popup after map finishes moving
-                        map.once('moveend', function () {
-                            var colocated = clients.filter(function (c) {
-                                return c.lat != null && c.lng != null &&
-                                    c.lat.toFixed(6) === client.lat.toFixed(6) &&
-                                    c.lng.toFixed(6) === client.lng.toFixed(6);
-                            });
-
-                            new maplibregl.Popup({ maxWidth: '320px' })
-                                .setLngLat([client.lng, client.lat])
-                                .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [client]))
-                                .addTo(map);
-                        });
-
-                        searchInput.value = client.name;
-                        suggestionsBox.style.display = 'none';
-                        clearBtn.style.display = 'block';
+                        html += '</div>';
+                        html += '</div>';
                     });
 
-                    suggestionsBox.appendChild(div);
+                    html += '</div>';
+                    return html;
+                }
+
+                function escapeHtml(text) {
+                    if (!text) return '';
+                    var div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                var fullGeoJSON = clientsToGeoJSON(clients);
+
+                var map = new maplibregl.Map({
+                    container: 'map',
+                    style: {
+                        version: 8,
+                        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+                        sources: {
+                            osm: {
+                                type: 'raster',
+                                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                                tileSize: 256,
+                                attribution: '&copy; OpenStreetMap contributors'
+                            }
+                        },
+                        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+                    },
+                    center: [30.5241361, 50.4500336],
+                    zoom: 5
                 });
 
-                suggestionsBox.style.display = 'block';
-            }
+                map.on('load', function () {
+                    if (clients.length === 0) return;
 
-            searchInput.addEventListener('input', function (e) {
-                var val = e.target.value;
-                clearBtn.style.display = val ? 'block' : 'none';
-                showSuggestions(val);
+                    map.addSource('clients', {
+                        type: 'geojson',
+                        data: fullGeoJSON
+                    });
 
-                // Debounce map filtering
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function () {
-                    filterMapByQuery(val);
-                }, 200);
-            });
+                    map.addLayer({
+                        id: 'unclustered-point',
+                        type: 'circle',
+                        source: 'clients',
+                        paint: {
+                            'circle-color': '#ef4444',
+                            'circle-radius': 8,
+                            'circle-stroke-width': 2,
+                            'circle-stroke-color': '#ffffff'
+                        }
+                    });
 
-            clearBtn.addEventListener('click', function () {
-                searchInput.value = '';
-                filterMapByQuery('');
-                suggestionsBox.style.display = 'none';
-                clearBtn.style.display = 'none';
-            });
 
-            document.addEventListener('click', function (e) {
-                if (!searchInputWrapper.contains(e.target)) {
-                    suggestionsBox.style.display = 'none';
-                }
-            });
+                    map.on('click', 'unclustered-point', function (e) {
+                        var feature = e.features[0];
+                        var coords = feature.geometry.coordinates.slice();
+                        var props = feature.properties;
 
-        });
+                        var colocated = clients.filter(function (c) {
+                            return c.lat != null && c.lng != null &&
+                                c.lat.toFixed(6) === coords[1].toFixed(6) &&
+                                c.lng.toFixed(6) === coords[0].toFixed(6);
+                        });
 
-    
-        })
-          .catch(err => console.error('Failed to load clients:', err));
+                        var popupClients = colocated.length > 0 ? colocated : [{
+                            name: props.name,
+                            color: props.color,
+                            phone: props.phone,
+                            email: props.email,
+                            contact: props.contact,
+                            address: props.address,
+                            notes: props.notes,
+                            label: props.label,
+                            orgTitle: props.orgTitle
+                        }];
+
+                        while (Math.abs(e.lngLat.lng - coords[0]) > 180) {
+                            coords[0] += e.lngLat.lng > coords[0] ? 360 : -360;
+                        }
+
+                        new maplibregl.Popup({ maxWidth: '320px' })
+                            .setLngLat(coords)
+                            .setHTML(buildPopupHTML(popupClients))
+                            .addTo(map);
+                    });
+
+                    map.on('mouseenter', 'unclustered-point', function () {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
+                    map.on('mouseleave', 'unclustered-point', function () {
+                        map.getCanvas().style.cursor = '';
+                    });
+
+                    var bounds = new maplibregl.LngLatBounds();
+                    clients.forEach(function (c) {
+                        if (c.lat != null && c.lng != null) {
+                            bounds.extend([c.lng, c.lat]);
+                        }
+                    });
+                    if (!bounds.isEmpty()) {
+                        map.fitBounds(bounds, { padding: 50, maxZoom: 12 });
+                    }
+
+                    document.getElementById('reset-view-btn').addEventListener('click', function () {
+                        // Restore all markers
+                        map.getSource('clients').setData(fullGeoJSON);
+
+                        // Clear search
+                        searchInput.value = '';
+                        clearBtn.style.display = 'none';
+                        suggestionsBox.style.display = 'none';
+
+                        // Reset filters
+                        countryFilter.value = '';
+                        oblastFilter.value = '';
+                        oblastFilter.style.display = '';
+
+                        // Reset map view
+                        if (!bounds.isEmpty()) {
+                            map.fitBounds(bounds, { padding: 50, maxZoom: 12, duration: 800 });
+                        }
+                    });
+
+                    var searchInput = document.getElementById('search');
+                    var searchInputWrapper = document.querySelector('.search-wrapper');
+                    var suggestionsBox = document.getElementById('suggestions');
+                    var clearBtn = document.getElementById('clear-btn');
+                    var debounceTimer = null;
+
+                    var countryFilter = document.getElementById('country-filter');
+                    var oblastFilter = document.getElementById('oblast-filter');
+                    function matchesCountry(c, country) {
+                        if (!country) return true;
+                        if (country === 'Грузія') {
+                            return c.address && (c.address.includes('Georgia') || c.address.includes('Грузія'));
+                        }
+                        if (country === 'Україна') {
+                            return !c.address || (!c.address.includes('Georgia') && !c.address.includes('Грузія'));
+                        }
+                        return c.address && c.address.includes(country);
+                    }
+
+                    function filterMapByQuery(q) {
+                        var country = countryFilter.value;
+                        var oblast = oblastFilter.value;
+                        var filtered = clients.filter(function (c) {
+                            var countryMatch = matchesCountry(c, country);
+                            var oblastMatch = !oblast || (c.address && c.address.includes(oblast + ' обл.'));
+                            return countryMatch && oblastMatch;
+                        });
+
+                        if (q && q.trim()) {
+                            var ql = q.trim().toLowerCase();
+                            filtered = filtered.filter(function (c) {
+                                var text = [c.name, c.address, c.contact, c.phone]
+                                    .filter(Boolean)
+                                    .join(' ')
+                                    .toLowerCase();
+                                return text.indexOf(ql) !== -1;
+                            });
+                        }
+                        map.getSource('clients').setData(clientsToGeoJSON(filtered));
+                    }
+
+                    function showSuggestions(q) {
+                        var ql = (q || '').trim().toLowerCase();
+                        suggestionsBox.innerHTML = '';
+
+                        if (!ql) {
+                            suggestionsBox.style.display = 'none';
+                            return;
+                        }
+
+                        var matches = clients.filter(function (c) {
+                            var text = [c.name, c.address, c.contact, c.phone]
+                                .filter(Boolean)
+                                .join(' ')
+                                .toLowerCase();
+                            return text.indexOf(ql) !== -1;
+                        }).slice(0, 10);
+
+                        if (matches.length === 0) {
+                            suggestionsBox.style.display = 'none';
+                            return;
+                        }
+
+                        matches.forEach(function (client) {
+                            var div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            div.textContent = client.name + (client.address ? ' (' + client.address + ')' : '');
+
+                            div.addEventListener('click', function () {
+                                map.getSource('clients').setData(fullGeoJSON);
+
+                                map.flyTo({
+                                    center: [client.lng, client.lat],
+                                    zoom: Math.max(map.getZoom(), 14),
+                                    essential: true
+                                });
+
+                                map.once('moveend', function () {
+                                    var colocated = clients.filter(function (c) {
+                                        return c.lat != null && c.lng != null &&
+                                            c.lat.toFixed(6) === client.lat.toFixed(6) &&
+                                            c.lng.toFixed(6) === client.lng.toFixed(6);
+                                    });
+
+                                    new maplibregl.Popup({ maxWidth: '320px' })
+                                        .setLngLat([client.lng, client.lat])
+                                        .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [client]))
+                                        .addTo(map);
+                                });
+
+                                searchInput.value = client.name;
+                                suggestionsBox.style.display = 'none';
+                                clearBtn.style.display = 'flex';
+                            });
+
+                            suggestionsBox.appendChild(div);
+                        });
+
+                        suggestionsBox.style.display = 'block';
+                    }
+
+                    searchInput.addEventListener('input', function (e) {
+                        var val = e.target.value;
+                        clearBtn.style.display = val ? 'block' : 'none';
+                        showSuggestions(val);
+
+                        clearTimeout(debounceTimer);
+                        debounceTimer = setTimeout(function () {
+                            filterMapByQuery(val);
+                        }, 200);
+                    });
+
+                    clearBtn.addEventListener('click', function () {
+                        searchInput.value = '';
+                        filterMapByQuery('');
+                        suggestionsBox.style.display = 'none';
+                        clearBtn.style.display = 'none';
+                    });
+
+                    document.addEventListener('click', function (e) {
+                        if (!searchInputWrapper.contains(e.target)) {
+                            suggestionsBox.style.display = 'none';
+                        }
+                    });
+
+                    function flyToClients(matchedClients, maxZoom) {
+                        if (!matchedClients.length) return;
+                        var b = new maplibregl.LngLatBounds();
+                        matchedClients.forEach(function (c) {
+                            if (c.lat != null && c.lng != null) b.extend([c.lng, c.lat]);
+                        });
+                        if (!b.isEmpty()) {
+                            map.fitBounds(b, { padding: 60, maxZoom: maxZoom || 10, duration: 1200 });
+                        }
+                    }
+
+                    countryFilter.addEventListener('change', function () {
+                        var country = countryFilter.value;
+
+                        // Show/hide oblast control based on country
+                        if (country === 'Грузія') {
+                            oblastFilter.value = '';
+                            oblastFilter.style.display = 'none';
+                        } else {
+                            oblastFilter.style.display = '';
+                        }
+
+                        filterMapByQuery(searchInput.value);
+
+                        // Fly to matching clients
+                        var matched = clients.filter(function (c) { return matchesCountry(c, country); });
+                        flyToClients(matched, country === 'Грузія' ? 12 : 7);
+                    });
+
+                    oblastFilter.addEventListener('change', function () {
+                        var oblast = oblastFilter.value;
+                        filterMapByQuery(searchInput.value);
+
+                        if (oblast) {
+                            var country = countryFilter.value;
+                            var matched = clients.filter(function (c) {
+                                return matchesCountry(c, country) &&
+                                    c.address && c.address.includes(oblast + ' обл.');
+                            });
+                            flyToClients(matched, 10);
+                        }
+                    });
+
+                });
+
+
+            })
+            .catch(err => console.error('Failed to load clients:', err));
 
     </script>
 </body>
