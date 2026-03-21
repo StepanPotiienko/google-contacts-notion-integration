@@ -27,7 +27,7 @@ from notion_utils import fetch_clients_from_notion
 
 # Initialize Flask app
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "public")
-app = Flask(__name__, static_folder=STATIC_DIR)
+app: Flask = Flask(__name__, static_folder=STATIC_DIR)
 
 # Increase max content length to handle large widget HTML payloads (100MB)
 # Default is 16MB, but with 700+ geocoded clients, widgets can be larger
@@ -66,7 +66,7 @@ def generate_widget():
     # Support both camelCase and snake_case
     api_key = data.get("api_key") or data.get("apiKey")
     database_id = data.get("database_id") or data.get("databaseId")
-    
+
     # Fallback to env vars if not provided in request
     if not api_key:
         api_key = os.environ.get("NOTION_API_KEY")
@@ -76,7 +76,12 @@ def generate_widget():
     # CSV/stored clients removed — only Notion clients are used now.
 
     if not api_key or not database_id:
-        return jsonify({"error": "Missing API key or database ID (check .env or request body)"}), 400
+        return (
+            jsonify(
+                {"error": "Missing API key or database ID (check .env or request body)"}
+            ),
+            400,
+        )
 
     notion_clients = []
 
@@ -268,7 +273,3 @@ def _get_widget(wid: str):
             print("An error occurred while deleting _WIDGET_STORE[wid].")
         return None
     return html
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5001)
