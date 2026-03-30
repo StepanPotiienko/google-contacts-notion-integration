@@ -1,5 +1,6 @@
 """Utilities for fetching and processing Notion data."""
 
+import asyncio
 import time
 import json  # added import
 
@@ -530,3 +531,277 @@ async def fetch_clients_from_notion(api_key, database_id):
             for fail in failed_geocodes:
                 print(f" - {fail}")
         print(f"----------------------------\n")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Streaming helpers — used by the SSE endpoint for live Notion loading
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _extract_client_from_page(page):
+    """Extract client data from a single Notion page.
+
+    Returns (client_data, place, page_id, page_edited) when valid,
+    or None when the page should be skipped (wrong Source / no address).
+    client_data already has lat/lng set when latlng was embedded in the page;
+    in that case place is None and geocoding is not needed.
+    """
+    props = page.get("properties", {})
+
+    # Filter: Source must equal "БАЗА"
+    source_prop = props.get("Source") or props.get("source")
+    source_value = None
+    if source_prop:
+        if source_prop.get("type") == "select" and source_prop.get("select"):
+            source_value = source_prop["select"].get("name", "")
+        elif source_prop.get("type") == "rich_text" and source_prop.get("rich_text"):
+            source_value = source_prop["rich_text"][0]["plain_text"] if source_prop["rich_text"] else ""
+    if source_value != "БАЗА":
+        return None
+
+    # Name
+    name_prop = props.get("Name") or props.get("name")
+    name = "Unnamed"
+    if name_prop and name_prop.get("title"):
+        name = name_prop["title"][0]["plain_text"] if name_prop["title"] else "Unnamed"
+
+    # Phone
+    phone = ""
+    phone_prop = props.get("ТЕЛЕФОН") or props.get("Phone")
+    if phone_prop and phone_prop.get("rich_text") and phone_prop["rich_text"]:
+        phone = phone_prop["rich_text"][0]["plain_text"]
+
+    # Email
+    email = ""
+    email_prop = props.get("ЕЛ.АДРЕСА") or props.get("Email") or props.get("E-mail 1 - Value")
+    if email_prop:
+        if email_prop.get("type") == "email":
+            email = email_prop.get("email") or ""
+        elif email_prop.get("type") == "rich_text" and email_prop.get("rich_text"):
+            email = email_prop["rich_text"][0]["plain_text"] if email_prop["rich_text"] else ""
+
+    # Contact
+    contact = ""
+    contact_prop = props.get("КОНТАКТ")
+    if contact_prop and contact_prop.get("rich_text") and contact_prop["rich_text"]:
+        contact = contact_prop["rich_text"][0]["plain_text"]
+
+    # Notes
+    notes = ""
+    notes_prop = props.get("ПРИМІТКА") or props.get("Notes")
+    if notes_prop and notes_prop.get("rich_text") and notes_prop["rich_text"]:
+        notes = notes_prop["rich_text"][0]["plain_text"]
+        if len(notes) > 100:
+            notes = notes[:100] + "..."
+
+    # Organization title
+    org_title = ""
+    org_title_prop = props.get("Organization Title")
+    if org_title_prop and org_title_prop.get("select"):
+        org_title = org_title_prop["select"].get("name", "")
+
+    # Color / label
+    color_map = {
+        "gray": "#6b7280", "brown": "#92400e", "orange": "#ea580c",
+        "yellow": "#eab308", "green": "#16a34a", "blue": "#2563eb",
+        "purple": "#9333ea", "pink": "#db2777", "red": "#ef4444",
+        "default": "#6b7280",
+    }
+    label_color = "#ef4444"
+    label_name = ""
+    labels_prop = props.get("Labels") or props.get("Label")
+    if labels_prop:
+        if labels_prop.get("type") == "multi_select" and labels_prop.get("multi_select"):
+            first = labels_prop["multi_select"][0]
+            label_color = color_map.get(first.get("color", "red"), "#ef4444")
+            label_name = first.get("name", "")
+        elif labels_prop.get("type") == "select" and labels_prop.get("select"):
+            label_color = color_map.get(labels_prop["select"].get("color", "red"), "#ef4444")
+            label_name = labels_prop["select"].get("name", "")
+
+    # Address / coordinates
+    place = ""
+    address_display = ""
+    latlng = None
+
+    for candidate_key in ["АДРЕСА", "Адреса", "Address 1 - Formatted"]:
+        candidate_prop = props.get(candidate_key)
+        if candidate_prop and candidate_prop.get("rich_text"):
+            txt = candidate_prop["rich_text"][0]["plain_text"] if candidate_prop["rich_text"] else ""
+            if txt and txt.strip():
+                place = txt
+                address_display = place
+                break
+
+    if not latlng and not place:
+        place_prop = props.get("Place") or props.get("place")
+        if place_prop and place_prop.get("type") == "place":
+            loc = place_prop.get("place")
+            if loc:
+                if "latitude" in loc and "longitude" in loc:
+                    latlng = (loc["latitude"], loc["longitude"])
+                    address_display = loc.get("name", "")
+                elif "name" in loc:
+                    place = loc["name"]
+                    address_display = place
+
+    if not latlng and not place:
+        addr_formatted = props.get("Address 1 - Formatted")
+        if addr_formatted and addr_formatted.get("rich_text"):
+            txt = addr_formatted["rich_text"][0]["plain_text"] if addr_formatted["rich_text"] else ""
+            if txt and txt.strip():
+                place = txt
+                address_display = place
+
+    if not latlng and not place:
+        parts = []
+        for key in ["Address 1 - Street", "Address 1 - City", "Address 1 - Region", "Address 1 - Country"]:
+            comp = props.get(key)
+            if comp and comp.get("rich_text"):
+                txt = comp["rich_text"][0]["plain_text"] if comp["rich_text"] else ""
+                if txt and txt.strip():
+                    parts.append(txt)
+        if parts:
+            place = ", ".join(parts)
+            address_display = place
+
+    client_data = {
+        "name": name, "color": label_color, "phone": phone,
+        "email": email, "contact": contact, "address": address_display,
+        "notes": notes, "label": label_name, "orgTitle": org_title,
+    }
+
+    if latlng:
+        client_data["lat"] = latlng[0]
+        client_data["lng"] = latlng[1]
+        return (client_data, None, None, None)
+
+    if place:
+        # Already a lat,lng string?
+        if "," in place and place.count(",") == 1:
+            try:
+                parts = place.split(",")
+                lat = float(parts[0].strip())
+                lng = float(parts[1].strip())
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    client_data["lat"] = lat
+                    client_data["lng"] = lng
+                    return (client_data, None, None, None)
+            except (ValueError, IndexError):
+                pass
+        page_id = page.get("id")
+        page_edited = page.get("last_edited_time") or ""
+        return (client_data, place, page_id, page_edited)
+
+    return None  # No usable address
+
+
+def _resolve_batch(items):
+    """Geocode a mini-batch of (client_data, place, page_id, page_edited) tuples.
+
+    Uses the existing geocode cache (page-level + address-level) and only calls
+    the geocoding API for addresses that are not cached.  Returns a list of
+    client dicts that have valid lat/lng.
+    """
+    try:
+        _load_geocode_cache()
+    except Exception:
+        pass
+
+    results = []
+    to_geocode = []  # (client_data, place, page_id, page_edited)
+
+    for client_data, place, page_id, page_edited in items:
+        # Already has coordinates
+        if client_data.get("lat") is not None:
+            results.append(client_data)
+            continue
+        if not place:
+            continue
+
+        coords = None
+
+        # Page-level cache (fastest — exact page match with edit timestamp)
+        if page_id:
+            page_key = f"page::{page_id}"
+            pc = _geocode_cache_manager.get(page_key)
+            if pc and isinstance(pc, dict):
+                if pc.get("coords") and pc.get("last_edited_time") == page_edited:
+                    coords = pc["coords"]
+                elif pc.get("lat"):
+                    coords = {"lat": pc["lat"], "lng": pc["lng"]}
+
+        # Address-level cache fallback
+        if not coords:
+            addr_key = _geocode_cache_key(place)
+            ac = _geocode_cache_manager.get(addr_key)
+            if ac and isinstance(ac, dict):
+                if ac.get("coords"):
+                    coords = ac["coords"]
+                elif ac.get("lat"):
+                    coords = {"lat": ac["lat"], "lng": ac["lng"]}
+
+        if coords:
+            client_data["lat"] = coords["lat"]
+            client_data["lng"] = coords["lng"]
+            results.append(client_data)
+        else:
+            to_geocode.append((client_data, place, page_id, page_edited))
+
+    # Hit the geocoding API for anything not yet cached
+    if to_geocode:
+        unique_places = list({p for _, p, _, _ in to_geocode if p})
+        if unique_places:
+            coords_map = batch_geocode(unique_places, max_workers=4, rate=4.0, burst=4)
+            for client_data, place, page_id, page_edited in to_geocode:
+                coords = coords_map.get(place) if place else None
+                if coords:
+                    client_data["lat"] = coords["lat"]
+                    client_data["lng"] = coords["lng"]
+                    results.append(client_data)
+                    if page_id:
+                        try:
+                            with _GEOCODE_CACHE_LOCK:
+                                _geocode_cache_manager.set(
+                                    f"page::{page_id}",
+                                    {"coords": coords, "last_edited_time": page_edited, "address": place},
+                                )
+                        except Exception:
+                            pass
+        try:
+            with _GEOCODE_CACHE_LOCK:
+                _save_geocode_cache()
+        except Exception:
+            pass
+
+    return results
+
+
+def stream_clients_from_notion(api_key, database_id, batch_size=25):
+    """Generator: yields lists of geocoded client dicts progressively.
+
+    Fetches all Notion pages once, then resolves them in mini-batches so the
+    SSE endpoint can flush each batch to the browser as soon as it is ready.
+    Clients whose addresses are already in the geocode cache are returned
+    almost instantly; uncached ones are geocoded just-in-time.
+    """
+    notion_data = asyncio.run(fetch_notion_data(api_key, database_id))
+    pages = notion_data.get("results", [])
+
+    pending = []  # list of (client_data, place, page_id, page_edited)
+    for page in pages:
+        result = _extract_client_from_page(page)
+        if result is None:
+            continue
+        pending.append(result)
+
+        if len(pending) >= batch_size:
+            resolved = _resolve_batch(pending)
+            pending = []
+            if resolved:
+                yield resolved
+
+    # Flush remaining pages
+    if pending:
+        resolved = _resolve_batch(pending)
+        if resolved:
+            yield resolved
