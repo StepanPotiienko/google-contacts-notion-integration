@@ -710,7 +710,6 @@
         }
     </style>
 
-    <script src="clients_array.js"></script>
     <script>
         (function () {
             // ── Constants ──────────────────────────────────────────────────────
@@ -791,7 +790,8 @@
                     var title = list.length > 1 ? '(' + (i + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
                     html += '<div class="popup-name" style="font-weight:600;font-size:14px;margin-bottom:4px;">' + title + '</div>';
                     if (c.label) {
-                        html += '<div class="popup-label" style="background-color:' + (c.color || '#ef4444') +
+                        var safeColor = /^#[0-9a-fA-F]{3,8}$/.test(c.color) ? c.color : '#ef4444';
+                        html += '<div class="popup-label" style="background-color:' + safeColor +
                             ';font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;display:inline-block;margin-bottom:8px;">' +
                             escapeHtml(c.label) + '</div>';
                     }
@@ -1137,6 +1137,7 @@
                 }
 
                 var sseActive = true;
+                var fallbackStarted = false;
                 streamFromNotion(
                     function onBatch(batch) {
                         if (!sseActive) return;
@@ -1175,12 +1176,19 @@
                         sseActive = false;
                         hideOverlay();
                         console.warn('[SSE] Error:', err.message);
-                        if (!mapInitialized) {
-                            // Fallback: stale cache → window.clients
-                            var fallback = (cached && cached.clients.length > 0)
-                                ? cached.clients
-                                : (window.clients && Array.isArray(window.clients) ? window.clients : []);
-                            initOnce(fallback);
+                        if (!mapInitialized && !fallbackStarted) {
+                            fallbackStarted = true;
+                            // Fallback: stale cache → clients.json
+                            var staleOrStatic = (cached && cached.clients.length > 0)
+                                ? cached.clients : null;
+                            if (staleOrStatic) {
+                                initOnce(staleOrStatic);
+                            } else {
+                                fetch('clients.json')
+                                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                                    .then(function (data) { initOnce(Array.isArray(data) ? data : []); })
+                                    .catch(function (e) { console.error('[Fallback] clients.json failed:', e); initOnce([]); });
+                            }
                         }
                     }
                 );
