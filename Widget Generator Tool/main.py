@@ -23,7 +23,7 @@ from flask import (
 # Import templates and utilities
 from templates import GENERATOR_HTML, INLINE_MAP_TEMPLATE
 from utils import merge_clients
-from notion_utils import fetch_clients_from_notion
+from notion_utils import fetch_clients_from_notion, stream_clients_from_notion
 
 # Initialize Flask app
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "public")
@@ -35,13 +35,15 @@ app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
 
 
 @app.errorhandler(413)
-def request_entity_too_large(error):
+def request_entity_too_large(error: Exception):  # type: ignore needed for app.errorhandler
     """Handle requests that exceed MAX_CONTENT_LENGTH."""
+    print(error)
     return (
         jsonify(
             {
                 "error": "Request too large",
-                "message": f"Maximum request size is {app.config['MAX_CONTENT_LENGTH'] // (1024*1024)}MB",
+                "message": f"Maximum request size is \
+                    {app.config['MAX_CONTENT_LENGTH'] // (1024*1024)}MB",
                 "suggestion": "Try reducing the number of clients or contact support",
             }
         ),
@@ -66,7 +68,7 @@ def generate_widget():
     # Support both camelCase and snake_case
     api_key = data.get("api_key") or data.get("apiKey")
     database_id = data.get("database_id") or data.get("databaseId")
-    
+
     # Fallback to env vars if not provided in request
     if not api_key:
         api_key = os.environ.get("NOTION_API_KEY")
@@ -76,7 +78,12 @@ def generate_widget():
     # CSV/stored clients removed — only Notion clients are used now.
 
     if not api_key or not database_id:
-        return jsonify({"error": "Missing API key or database ID (check .env or request body)"}), 400
+        return (
+            jsonify(
+                {"error": "Missing API key or database ID (check .env or request body)"}
+            ),
+            400,
+        )
 
     notion_clients = []
 
@@ -143,12 +150,18 @@ def generate_widget():
             widget_html = INLINE_MAP_TEMPLATE.format(clients_json=clients_json)
 
         # Store widget immediately on the server to avoid large payloads
+        wid = _store_widget(widget_html)
+
+        # Inject widget ID as a data attribute for robust client-side detection
+        widget_html = widget_html.replace(
+            '<div id="map"', f'<div id="map" data-widget-id="{wid}"'
+        )
+
         html_size_mb = len(widget_html.encode("utf-8")) / (1024 * 1024)
         print(
             f"[INFO] Generated widget HTML: {html_size_mb:.2f} MB for {len(clients)} clients"
         )
 
-        wid = _store_widget(widget_html)
         preview_url = url_for("view_widget_id", wid=wid, _external=True)
 
         return jsonify(
@@ -224,7 +237,52 @@ def view_widget_id(wid: str):
     widget_html = _get_widget(wid)
     if not widget_html:
         return "Widget not found or expired", 404
+    # Inject widget ID as a data attribute for robust client-side detection
+    # This ensures the ID is available even if the URL changes or wid is not in params
+    widget_html = widget_html.replace(
+        '<div id="map"', f'<div id="map" data-widget-id="{wid}"'
+    )
     return render_template_string(widget_html)
+
+
+@app.route("/api/notion-clients/stream", methods=["GET"])
+def stream_notion_clients():
+    """Server-Sent Events endpoint that streams Notion clients in batches.
+
+    Credentials are read exclusively from server-side .env — the API key is
+    never exposed to the browser.  Emits:
+      event: batch  data: [... client objects ...]
+      event: done   data: {"total": N}
+      event: error  data: {"message": "..."}
+    """
+    api_key = os.environ.get("NOTION_API_KEY")
+    database_id = os.environ.get("NOTION_DATABASE_ID")
+
+    if not api_key or not database_id:
+        return (
+            jsonify({"error": "NOTION_API_KEY and NOTION_DATABASE_ID must be set in .env"}),
+            500,
+        )
+
+    def generate():
+        total = 0
+        try:
+            for batch in stream_clients_from_notion(api_key, database_id, batch_size=25):
+                total += len(batch)
+                payload = json.dumps(batch, ensure_ascii=False)
+                yield f"event: batch\ndata: {payload}\n\n"
+            yield f"event: done\ndata: {{\"total\": {total}}}\n\n"
+        except GeneratorExit:
+            pass  # client disconnected
+        except Exception as exc:  # noqa: BLE001
+            err_payload = json.dumps({"message": str(exc)}, ensure_ascii=False)
+            yield f"event: error\ndata: {err_payload}\n\n"
+
+    resp = app.response_class(generate(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"  # disable nginx buffering
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.route("/api/widget/<wid>", methods=["GET"])
