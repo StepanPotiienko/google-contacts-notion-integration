@@ -23,6 +23,14 @@ class NotionController:
 
     def __init__(self):
         self.notion_client = self._create_client()
+        self._db_schema_cache = {}
+
+    def _get_db_property_names(self, database_id):
+        """Return the set of property names for a database, cached after first fetch."""
+        if database_id not in self._db_schema_cache:
+            db = self.notion_client.databases.retrieve(database_id=database_id)
+            self._db_schema_cache[database_id] = set(db["properties"].keys())
+        return self._db_schema_cache[database_id]
 
     def _create_client(self):
         """Create Notion client with proper timeout settings"""
@@ -524,27 +532,31 @@ class NotionController:
         print(f"Total existing tasks: {len(existing_tasks)}")
         return existing_tasks
 
-    def create_contact_page(self, contact):
+    def create_contact_page(self, contact, database_id=None, title_property="Client Name"):
         """Create a new page for a contact"""
+        if database_id is None:
+            database_id = CRM_DATABASE_ID
         contact_name, email, phone = contact
+
+        db_props = self._get_db_property_names(database_id)
 
         def create_page():
             properties = {
-                "Client Name": {"title": [{"text": {"content": contact_name}}]}
+                title_property: {"title": [{"text": {"content": contact_name}}]}
             }
 
-            # Only add email if it's valid
-            if email and email != "No email":
+            # Only add email if it's valid and the property exists in this database
+            if email and email != "No email" and "Email" in db_props:
                 properties["Email"] = {"email": email}
 
-            # Only add phone if it's valid
-            if phone and phone != "No phone":
-                properties["phone_number"] = {
+            # Only add phone if it's valid and the property exists in this database
+            if phone and phone != "No phone" and "Phone" in db_props:
+                properties["Phone"] = {
                     "rich_text": [{"text": {"content": phone}}]
                 }
 
             return self.notion_client.pages.create(
-                parent={"database_id": CRM_DATABASE_ID},
+                parent={"database_id": database_id},
                 properties=properties,
             )
 
@@ -556,8 +568,10 @@ class NotionController:
             print(f"✗ Failed to create {contact_name}: {e}")
             return False
 
-    def find_missing_tasks(self, contacts_list):
+    def find_missing_tasks(self, contacts_list, database_id=None, title_property="Client Name"):
         """Create pages for contacts that don't exist in the database"""
+        if database_id is None:
+            database_id = CRM_DATABASE_ID
         if not contacts_list:
             print("No contacts to process")
             return
@@ -578,7 +592,7 @@ class NotionController:
                         ({success_count} created, {failed_count} failed)"
                 )
 
-            if self.create_contact_page(contact):
+            if self.create_contact_page(contact, database_id=database_id, title_property=title_property):
                 success_count += 1
             else:
                 failed_count += 1

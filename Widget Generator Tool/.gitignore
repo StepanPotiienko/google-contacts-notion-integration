@@ -1,0 +1,45 @@
+# ── Sensitive / PII client data ───────────────────────────────────────────────
+# geocode_cache.json contains full client names + addresses (personal data)
+public/geocode_cache.json
+geocode_cache.json
+
+# Generated client snapshots — contain personal data, never commit
+public/clients_array.js
+public/clients_store.json
+clients_store.json
+clients_array.js
+
+# ── Environment / secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example        # allow a safe template file to be committed
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+env/
+venv/
+.venv/
+.ENV/
+env.bak/
+venv.bak/
+
+# ── OS / editor junk ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ── Logs & temp files ─────────────────────────────────────────────────────────
+*.log
+*.sqlite3
