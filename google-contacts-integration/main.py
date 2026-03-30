@@ -265,30 +265,73 @@ def main():
         if args.phase == "all":
             time.sleep(2)
 
-        # Phase: Notion duplicate cleanup (by Name in CRM DB)
+        # Phase: Notion duplicate cleanup (by Name in CRM DB and Production DB)
         # Skip if no changes detected during incremental sync
-        if args.phase in ("dedup", "all") and os.environ.get("CRM_DATABASE_ID"):
+        if args.phase in ("dedup", "all"):
             if args.phase == "all" and not changes_detected:
                 print("No Google changes detected. Skipping dedup phase.")
             else:
-                notion_controller.delete_name_duplicates(
-                    database_id=os.environ["CRM_DATABASE_ID"],
+                dedup_kwargs = dict(
                     max_minutes=(
                         args.dedup_max_minutes if args.dedup_max_minutes > 0 else None
-                    ),
+                    )
                 )
+                if os.environ.get("CRM_DATABASE_ID"):
+                    notion_controller.delete_name_duplicates(
+                        database_id=os.environ["CRM_DATABASE_ID"], **dedup_kwargs
+                    )
+                if os.environ.get("PRODUCTION_DATABASE_ID"):
+                    notion_controller.delete_name_duplicates(
+                        database_id=os.environ["PRODUCTION_DATABASE_ID"], **dedup_kwargs
+                    )
+                if os.environ.get("PRODUCTION_DATABASE_ID_2"):
+                    notion_controller.delete_name_duplicates(
+                        database_id=os.environ["PRODUCTION_DATABASE_ID_2"], **dedup_kwargs
+                    )
 
         # Phase: contacts push into Notion
+        # Each database is processed independently: dedup check then create.
+        # Title property and available fields are detected automatically from the schema.
         if args.phase in ("contacts", "all"):
             # Load contacts from file if running as separate phase
             if args.phase == "contacts":
                 contacts_list.extend(load_contacts_from_file())
 
-            contacts_to_create = notion_controller.delete_duplicates_in_database(
-                database_id=os.environ.get("CRM_DATABASE_ID", ""),
-                contacts_list=contacts_list,
-            )
-            notion_controller.find_missing_tasks(contacts_to_create)
+            # Sync to CRM database (title property: "Client Name")
+            if os.environ.get("CRM_DATABASE_ID"):
+                contacts_to_create = notion_controller.delete_duplicates_in_database(
+                    database_id=os.environ["CRM_DATABASE_ID"],
+                    contacts_list=contacts_list,
+                )
+                notion_controller.find_missing_tasks(
+                    contacts_to_create,
+                    database_id=os.environ["CRM_DATABASE_ID"],
+                    title_property="Client Name",
+                )
+
+            # Sync to Production database (title property: "Name")
+            if os.environ.get("PRODUCTION_DATABASE_ID"):
+                contacts_to_create = notion_controller.delete_duplicates_in_database(
+                    database_id=os.environ["PRODUCTION_DATABASE_ID"],
+                    contacts_list=contacts_list,
+                )
+                notion_controller.find_missing_tasks(
+                    contacts_to_create,
+                    database_id=os.environ["PRODUCTION_DATABASE_ID"],
+                    title_property="Name",
+                )
+
+            # Sync to Production database 2 (title property: "Name")
+            if os.environ.get("PRODUCTION_DATABASE_ID_2"):
+                contacts_to_create = notion_controller.delete_duplicates_in_database(
+                    database_id=os.environ["PRODUCTION_DATABASE_ID_2"],
+                    contacts_list=contacts_list,
+                )
+                notion_controller.find_missing_tasks(
+                    contacts_to_create,
+                    database_id=os.environ["PRODUCTION_DATABASE_ID_2"],
+                    title_property="Name",
+                )
 
             # Clean up contacts file after processing
             if os.path.exists(CONTACTS_FILE):
