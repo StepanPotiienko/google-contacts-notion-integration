@@ -38,4 +38,6 @@ sync_token.txt
 contacts_to_sync.json
 dedup_checkpoint.json
 clients_array.js
-clients_array.js
+refresh_token.txt
+
+.claude/
