@@ -1,14 +1,13 @@
 """Notion related stuff"""
 
+import json
 import os
 import time
 from typing import Optional
-import json
 
 import dotenv
 import httpx
 from notion_client import Client
-
 from notion_client.errors import APIResponseError, RequestTimeoutError
 
 dotenv.load_dotenv()
@@ -247,7 +246,6 @@ class NotionController:
 
         # Load checkpoint if exists
         if os.path.exists(checkpoint_path):
-
             try:
                 with open(checkpoint_path, "r", encoding="UTF-8") as f:
                     data = json.load(f)
@@ -432,7 +430,7 @@ class NotionController:
                 duplicate_count += 1
                 if (i + 1) % 100 == 0 or (i + 1) == len(contacts_list):
                     print(
-                        f"Progress: {i+1}/{len(contacts_list)} checked, \
+                        f"Progress: {i + 1}/{len(contacts_list)} checked, \
                             {duplicate_count} duplicates found"
                     )
 
@@ -532,7 +530,9 @@ class NotionController:
         print(f"Total existing tasks: {len(existing_tasks)}")
         return existing_tasks
 
-    def create_contact_page(self, contact, database_id=None, title_property="Client Name"):
+    def create_contact_page(
+        self, contact, database_id=None, title_property="Client Name"
+    ):
         """Create a new page for a contact"""
         if database_id is None:
             database_id = CRM_DATABASE_ID
@@ -551,9 +551,7 @@ class NotionController:
 
             # Only add phone if it's valid and the property exists in this database
             if phone and phone != "No phone" and "Phone" in db_props:
-                properties["Phone"] = {
-                    "rich_text": [{"text": {"content": phone}}]
-                }
+                properties["Phone"] = {"rich_text": [{"text": {"content": phone}}]}
 
             return self.notion_client.pages.create(
                 parent={"database_id": database_id},
@@ -568,7 +566,9 @@ class NotionController:
             print(f"✗ Failed to create {contact_name}: {e}")
             return False
 
-    def find_missing_tasks(self, contacts_list, database_id=None, title_property="Client Name"):
+    def find_missing_tasks(
+        self, contacts_list, database_id=None, title_property="Client Name"
+    ):
         """Create pages for contacts that don't exist in the database"""
         if database_id is None:
             database_id = CRM_DATABASE_ID
@@ -588,11 +588,13 @@ class NotionController:
             # Show progress every 10 contacts
             if (i + 1) % 10 == 0 or (i + 1) == len(contacts_list):
                 print(
-                    f"Progress: {i+1}/{len(contacts_list)} \
+                    f"Progress: {i + 1}/{len(contacts_list)} \
                         ({success_count} created, {failed_count} failed)"
                 )
 
-            if self.create_contact_page(contact, database_id=database_id, title_property=title_property):
+            if self.create_contact_page(
+                contact, database_id=database_id, title_property=title_property
+            ):
                 success_count += 1
             else:
                 failed_count += 1
@@ -627,8 +629,10 @@ def delete_duplicates_in_database(database_id, contacts_list):
     )
 
 
-def find_missing_tasks(contacts_list):
-    notion_controller.find_missing_tasks(contacts_list)
+def find_missing_tasks(contacts_list, database_id=None, title_property="Client Name"):
+    return notion_controller.find_missing_tasks(
+        contacts_list, database_id=database_id, title_property=title_property
+    )
 
 
 def delete_duplicates():
