@@ -30,20 +30,20 @@ jobs:
       - name: Lint with pylint
         run: |
           # Stop the build if there are Python syntax errors or undefined names
-          pylint --errors-only google-contacts-integration/main.py notion/delete_duplicates.py notion/notion_controller.py run_duplicate_cleanup.py || true
+          pylint --errors-only google-contacts-integration/main.py notion/delete_duplicates.py notion_controller.py run_duplicate_cleanup.py || true
 
       - name: Check Python syntax
         run: |
           python -m py_compile google-contacts-integration/main.py
           python -m py_compile notion/delete_duplicates.py
-          python -m py_compile notion/notion_controller.py
+          python -m py_compile notion_controller.py
           python -m py_compile run_duplicate_cleanup.py
 
       - name: Test imports
         run: |
           python -c "import sys; sys.path.insert(0, 'google-contacts-integration'); import main"
           python -c "import sys; sys.path.insert(0, 'notion'); import delete_duplicates"
-          python -c "import sys; sys.path.insert(0, 'notion'); import notion_controller"
+          python -c "import notion_controller"
 
       - name: Test delete_duplicates functions
         run: |
