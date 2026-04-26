@@ -2,6 +2,7 @@
 """Regenerate the widget HTML file with interactive map"""
 
 import os
+import re
 import json
 from dotenv import load_dotenv
 import asyncio
@@ -24,7 +25,9 @@ def main():
     clients = asyncio.run(fetch_clients_from_notion(api_key, database_id))
 
     # Filter out clients without valid coordinates
-    clients = [c for c in clients if c.get("lat") is not None and c.get("lng") is not None]
+    clients = [
+        c for c in clients if c.get("lat") is not None and c.get("lng") is not None
+    ]
 
     if not clients:
         print("⚠️  Warning: No clients with location data found")
@@ -680,6 +683,37 @@ def main():
     print(f"   Clients on map: {len(clients)}")
     print(f"\n📍 Open the widget:")
     print(f"   file://{output_path}")
+
+    # Also sync client data into widget-map/index.html (standalone deployment copy)
+    widget_map_path = os.path.join(
+        os.path.dirname(__file__), "..", "widget-map", "index.html"
+    )
+    widget_map_path = os.path.normpath(widget_map_path)
+    if os.path.exists(widget_map_path):
+        try:
+            with open(widget_map_path, "r", encoding="utf-8") as f:
+                wm_content = f.read()
+
+            clients_json = json.dumps(clients, ensure_ascii=False)
+            # Replace the inline clients array (handles both single-line and multiline)
+            wm_updated = re.sub(
+                r"const\s+clients\s*=\s*\[.*?\];",
+                f"const clients = {clients_json};",
+                wm_content,
+                flags=re.DOTALL,
+            )
+            if wm_updated != wm_content:
+                with open(widget_map_path, "w", encoding="utf-8") as f:
+                    f.write(wm_updated)
+                print(
+                    f"\n🔄 Also synced {len(clients)} clients → widget-map/index.html"
+                )
+            else:
+                print(
+                    f"\n⚠️  Could not find clients array in widget-map/index.html to update"
+                )
+        except (OSError, IOError) as e:
+            print(f"\n⚠️  Could not sync widget-map/index.html: {e}")
 
 
 if __name__ == "__main__":
