@@ -27,7 +27,7 @@ from notion_utils import fetch_clients_from_notion, stream_clients_from_notion
 
 # Initialize Flask app
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "public")
-app = Flask(__name__, static_folder=STATIC_DIR)
+app: Flask = Flask(__name__, static_folder=STATIC_DIR)
 
 # Increase max content length to handle large widget HTML payloads (100MB)
 # Default is 16MB, but with 700+ geocoded clients, widgets can be larger
@@ -326,7 +326,3 @@ def _get_widget(wid: str):
             print("An error occurred while deleting _WIDGET_STORE[wid].")
         return None
     return html
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5001)

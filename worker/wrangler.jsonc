@@ -1,0 +1,23 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "google-contacts-notion-worker",
+	"main": "index.js",
+	"compatibility_date": "2025-12-22",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
+	"vars": {
+		"DEFAULT_BRANCH": "main",
+	},
+	"observability": {
+		"enabled": true
+	}
+}

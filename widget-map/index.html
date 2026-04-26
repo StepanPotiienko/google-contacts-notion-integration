@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Client Map</title>
+    <link href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
+    <style>
+        :root {
+            --color-accent: #dd3a28;
+            --color-accent-glow: rgba(221, 58, 40, 0.12);
+
+            --color-bg-sidebar: #2d2d2d;
+            --color-bg-input: #434343;
+            --color-border: rgba(221, 58, 40, 0.3);
+            --color-border-strong: #dd3a28;
+            --color-border-input: rgba(255, 255, 255, 0.12);
+
+            --color-text-primary: #ffffff;
+            --color-text-secondary: rgba(255, 255, 255, 0.85);
+            --color-text-muted: rgba(255, 255, 255, 0.55);
+            --color-text-faint: rgba(255, 255, 255, 0.35);
+            --color-surface: rgba(255, 255, 255, 0.07);
+
+            --color-focus: #dd3a28;
+            --color-focus-glow: rgba(221, 58, 40, 0.18);
+            --color-backdrop: rgba(0, 0, 0, 0.5);
+            --shadow-card: 0 2px 8px rgba(221, 58, 40, 0.08);
+            --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.4);
+
+            --radius-sm: 0.5rem;
+            --radius-md: 0.75rem;
+            --radius-lg: 1rem;
+
+            --space-xs: clamp(0.25rem, 0.5vw, 0.375rem);
+            --space-sm: clamp(0.5rem, 1vw, 0.75rem);
+            --space-md: clamp(0.75rem, 1.5vw, 1rem);
+            --space-lg: clamp(1rem, 2vw, 1.5rem);
+
+            --sidebar-width: 20%;
+            --sidebar-width-mobile: 85%;
+
+            --font-size-xs: clamp(0.6875rem, 1.2vw, 0.75rem);
+            --font-size-sm: clamp(0.75rem, 1.4vw, 0.8125rem);
+            --font-size-base: clamp(0.875rem, 1.6vw, 1rem);
+
+            --tap-target: 2.75rem;
+            --transition: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @font-face {
+            font-family: 'Rubik One Local';
+            src: url('Rubik.ttf') format('truetype');
+            font-style: normal;
+            font-display: swap;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Rubik', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 400;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            font-size: 16px;
+        }
+
+        /* ── Widget root: CSS Grid layout ── */
+        #widget-root {
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-template-rows: 100vh;
+            height: 100vh;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Map container fills the full grid cell on mobile */
+        #map-container {
+            grid-area: 1 / 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .maplibregl-popup {
+            z-index: 10000 !important;
+            max-width: 320px !important;
+        }
+
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            width: 16px;
+            height: 16px;
+            color: var(--color-accent);
+            pointer-events: none;
+        }
+
+        #search {
+            width: 100%;
+            padding: var(--space-xs) 2.25rem var(--space-xs) 2.125rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--color-border-strong);
+            outline: none;
+            font-size: var(--font-size-sm);
+            min-height: var(--tap-target);
+            background: var(--color-bg-input);
+            color: var(--color-text-primary);
+            transition: box-shadow var(--transition), border-color var(--transition);
+        }
+
+        #search::placeholder {
+            color: var(--color-text-muted);
+        }
+
+        #search:focus {
+            box-shadow: 0 6px 18px var(--color-focus-glow);
+            border-color: var(--color-focus);
+        }
+
+        #clear-btn {
+            position: absolute;
+            right: var(--space-xs);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-width: var(--tap-target);
+            min-height: var(--tap-target);
+            background: transparent;
+            border: none;
+            font-size: 1rem;
+            color: var(--color-text-muted);
+            cursor: pointer;
+        }
+
+        #clear-btn:hover {
+            color: var(--color-accent);
+        }
+
+        .suggestions {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            right: 0;
+            background: #2d2d2d;
+            border: 1px solid var(--color-border-strong);
+            box-shadow: 0 6px 20px rgba(221, 58, 40, 0.12);
+            border-radius: var(--radius-sm);
+            max-height: 13.75rem;
+            overflow: auto;
+            z-index: 10010;
+            display: none;
+        }
+
+        .suggestions::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .suggestions::-webkit-scrollbar-thumb {
+            background: var(--color-accent);
+            border-radius: 8px;
+        }
+
+        .suggestion-item {
+            padding: var(--space-xs) var(--space-sm);
+            font-size: var(--font-size-sm);
+            min-height: var(--tap-target);
+            display: flex;
+            align-items: center;
+            color: var(--color-text-primary);
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background: var(--color-accent);
+            color: #fff;
+        }
+
+        /* ── Sidebar ── */
+        aside#sidebar {
+            position: absolute;
+            inset-block: 0;
+            inset-inline-start: 0;
+            width: var(--sidebar-width-mobile);
+            max-width: 22rem;
+            height: 100%;
+            background: var(--color-bg-sidebar);
+            border-right: 1px solid var(--color-border-strong);
+            box-shadow: var(--shadow-sidebar);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 10002;
+            transform: translateX(-100%);
+            transition: transform var(--transition);
+            will-change: transform;
+        }
+
+        aside#sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        aside#sidebar::-webkit-scrollbar-thumb {
+            background: var(--color-accent);
+            border-radius: 8px;
+        }
+
+        aside#sidebar.mobile-open {
+            transform: translateX(0);
+        }
+
+        #sidebar-inner {
+            padding: var(--space-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        #sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-block-end: var(--space-sm);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        #sidebar-title {
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            white-space: nowrap;
+        }
+
+        /* X close — mobile only */
+        #sidebar-close-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: var(--tap-target);
+            min-height: var(--tap-target);
+            background: transparent;
+            border: none;
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: color var(--transition);
+        }
+
+        #sidebar-close-btn:hover {
+            color: var(--color-text-primary);
+        }
+
+        /* Burger — mobile only, floats over map */
+        #burger-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: var(--space-md);
+            left: var(--space-md);
+            z-index: 10003;
+            min-width: var(--tap-target);
+            min-height: var(--tap-target);
+            background: var(--color-bg-sidebar);
+            border: 1px solid var(--color-border-strong);
+            border-radius: var(--radius-md);
+            font-size: 1.125rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-card);
+            color: var(--color-text-primary);
+            transition: background var(--transition);
+        }
+
+        #burger-btn:hover {
+            background: var(--color-bg-input);
+        }
+
+        /* Desktop collapse toggle — hidden on mobile */
+        #sidebar-toggle {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            z-index: 10002;
+            width: 1.25rem;
+            min-height: var(--tap-target);
+            background: var(--color-bg-sidebar);
+            border: 1px solid var(--color-border-strong);
+            border-left: none;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+            transition: color var(--transition), background var(--transition);
+        }
+
+        #sidebar-toggle:hover {
+            color: var(--color-text-primary);
+            background: var(--color-bg-input);
+        }
+
+        /* Mobile backdrop overlay */
+        #sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--color-backdrop);
+            z-index: 10001;
+        }
+
+        #sidebar-backdrop.active {
+            display: block;
+        }
+
+        /* ── Filter section ── */
+        .filter-section {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+        }
+
+        .filter-label {
+            font-size: var(--font-size-xs);
+            font-weight: 700;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .filter-select {
+            width: 100%;
+            padding: 8px 2rem 8px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--color-border-strong);
+            outline: none;
+            font-size: 14px;
+            font-weight: 700;
+            min-height: var(--tap-target);
+            background: var(--color-bg-input);
+            color: var(--color-text-primary);
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23dd3a28' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            transition: box-shadow var(--transition), border-color var(--transition), background var(--transition);
+        }
+
+        .filter-select option {
+            background: #2d2d2d;
+            color: #fff;
+        }
+
+        .filter-select:focus {
+            box-shadow: 0 6px 18px var(--color-focus-glow);
+            border-color: var(--color-focus);
+            background: #434343;
+        }
+
+        .filter-select:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ── Reset button ── */
+        #reset-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            width: 100%;
+            min-height: var(--tap-target);
+            padding: 0 var(--space-sm);
+            border-radius: 8px;
+            border: 1px solid var(--color-border-strong);
+            background: transparent;
+            color: var(--color-text-primary);
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition);
+            margin-top: auto;
+        }
+
+        #reset-btn:hover {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        #reset-btn svg {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+        }
+
+        /* ── Breakpoint: 768px — desktop sidebar ── */
+        @media (min-width: 48rem) {
+            #widget-root {
+                grid-template-columns: var(--sidebar-width) 1fr;
+            }
+
+            #map-container {
+                grid-column: 2;
+            }
+
+            aside#sidebar {
+                position: static;
+                transform: none;
+                width: 100%;
+                max-width: 100%;
+                height: 100%;
+                grid-column: 1;
+                grid-row: 1;
+                box-shadow: none;
+                transition: none;
+            }
+
+            /* Collapsed: hide sidebar column */
+            #widget-root.sidebar-collapsed {
+                grid-template-columns: 0 1fr;
+            }
+
+            #widget-root.sidebar-collapsed aside#sidebar {
+                overflow: hidden;
+                visibility: hidden;
+            }
+
+            #sidebar-toggle {
+                display: flex;
+            }
+
+            #burger-btn {
+                display: none;
+            }
+
+            #sidebar-close-btn {
+                display: none;
+            }
+        }
+
+        .maplibregl-popup-content {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            color: #111827;
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .maplibregl-popup-close-button {
+            font-size: 18px;
+            padding: 8px 12px;
+            color: #6b7280;
+            right: 4px;
+            top: 4px;
+        }
+
+        .maplibregl-popup-close-button:hover {
+            background: transparent;
+            color: #111827;
+        }
+
+        .popup-header {
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }
+
+        .popup-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0 0 4px 0;
+            padding-right: 20px;
+        }
+
+        .popup-label {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: white;
+        }
+
+        .popup-body {
+            padding: 12px 16px;
+        }
+
+        .popup-row {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+
+        .popup-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .popup-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            color: #9ca3af;
+        }
+
+        .popup-value {
+            color: #374151;
+            word-break: break-word;
+        }
+
+        .popup-value a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .popup-value a:hover {
+            text-decoration: underline;
+        }
+
+        .popup-notes {
+            font-size: 12px;
+            color: #6b7280;
+            font-style: italic;
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .popup-coords {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="widget-root">
+
+        <!-- Sidebar: complementary landmark with search + filters -->
+        <aside id="sidebar" aria-label="Client filters and search">
+            <div id="sidebar-inner">
+
+                <header id="sidebar-header">
+                    <span id="sidebar-title">Клієнти</span>
+                    <button id="sidebar-close-btn" aria-label="Close sidebar">&#x2715;</button>
+                </header>
+
+                <section aria-label="Search">
+                    <div class="search-wrapper">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            aria-hidden="true">
+                            <circle cx="11" cy="11" r="7" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input id="search" type="search" placeholder="Пошук..." autocomplete="off"
+                            aria-label="Search clients" />
+                        <button id="clear-btn" aria-label="Clear search">&#x00D7;</button>
+                        <div id="suggestions" class="suggestions" role="listbox" aria-label="Search suggestions"></div>
+                    </div>
+                </section>
+
+                <section class="filter-section" aria-label="Filter by location">
+                    <label class="filter-label" for="country-filter">Країна</label>
+                    <select class="filter-select" id="country-filter">
+                        <option value="">Країна</option>
+                        <option value="Україна">Україна</option>
+                        <option value="Грузія">Грузія</option>
+                    </select>
+                </section>
+
+                <section class="filter-section" aria-label="Filter by region">
+                    <label class="filter-label" for="region-filter">Область</label>
+                    <select class="filter-select" id="region-filter">
+                        <option value="">Область</option>
+                        <option value="Вінницька">Вінницька</option>
+                        <option value="Волинська">Волинська</option>
+                        <option value="Дніпропетровська">Дніпропетровська</option>
+                        <option value="Донецька">Донецька</option>
+                        <option value="Житомирська">Житомирська</option>
+                        <option value="Закарпатська">Закарпатська</option>
+                        <option value="Запорізька">Запорізька</option>
+                        <option value="Івано-Франківська">Івано-Франківська</option>
+                        <option value="Київська">Київська</option>
+                        <option value="Кіровоградська">Кіровоградська</option>
+                        <option value="Луганська">Луганська</option>
+                        <option value="Львівська">Львівська</option>
+                        <option value="Миколаївська">Миколаївська</option>
+                        <option value="Одеська">Одеська</option>
+                        <option value="Полтавська">Полтавська</option>
+                        <option value="Рівненська">Рівненська</option>
+                        <option value="Сумська">Сумська</option>
+                        <option value="Тернопільська">Тернопільська</option>
+                        <option value="Харківська">Харківська</option>
+                        <option value="Херсонська">Херсонська</option>
+                        <option value="Хмельницька">Хмельницька</option>
+                        <option value="Черкаська">Черкаська</option>
+                        <option value="Чернівецька">Чернівецька</option>
+                        <option value="Чернігівська">Чернігівська</option>
+                        <option value="м.Київ">м.Київ</option>
+                        <option value="м.Севастополь">м.Севастополь</option>
+                        <option value="АР Крим">АР Крим</option>
+                    </select>
+                </section>
+
+                <button id="reset-btn" aria-label="Reset all filters">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                    </svg>
+                    Скинути
+                </button>
+
+            </div>
+        </aside>
+
+        <!-- Main map area -->
+        <main id="map-container" aria-label="Client map">
+            <button id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="true">&#x276E;</button>
+            <button id="burger-btn" aria-label="Open sidebar" aria-controls="sidebar">&#x2630;</button>
+            <div id="map" role="application" aria-label="Interactive map"></div>
+        </main>
+
+    </div>
+    <div id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- Loading overlay badge (shown while streaming from Notion) -->
+    <div id="loading-overlay" aria-live="polite" aria-label="Loading status" style="
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(30,30,30,0.92);
+        color: #fff;
+        padding: 7px 18px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-family: inherit;
+        z-index: 10010;
+        border: 1px solid #dd3a28;
+        display: none;
+        white-space: nowrap;
+        backdrop-filter: blur(6px);
+        box-shadow: 0 2px 16px rgba(221,58,40,0.25);
+        pointer-events: none;
+        gap: 8px;
+        align-items: center;
+    ">
+        <span id="loading-spinner" style="
+            display:inline-block;width:10px;height:10px;
+            border:2px solid rgba(255,255,255,0.3);
+            border-top-color:#dd3a28;
+            border-radius:50%;
+            animation:spin 0.7s linear infinite;
+        "></span>
+        <span id="loading-text">Завантаження...</span>
+    </div>
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #loading-overlay {
+            display: none;
+        }
+
+        #loading-overlay.visible {
+            display: flex;
+        }
+    </style>
+
+    <script>
+        (function () {
+            // ── Constants ──────────────────────────────────────────────────────
+            var CACHE_KEY = 'agropride_clients_v1';
+            var CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+            // ── Shared map state ──────────────────────────────────────────────
+            var map = null;
+            var mapLoaded = false;
+            var userHasMoved = false;
+            var allClients = [];          // current full client list (referenced by filters)
+            var fullGeoJSON = { type: 'FeatureCollection', features: [] };
+
+            // ── Cache helpers ─────────────────────────────────────────────────
+            function tryGetCache() {
+                try {
+                    var raw = localStorage.getItem(CACHE_KEY);
+                    if (!raw) return null;
+                    var parsed = JSON.parse(raw);
+                    var age = Date.now() - (parsed.cachedAt || 0);
+                    return { clients: parsed.clients || [], stale: age > CACHE_TTL_MS };
+                } catch (e) { return null; }
+            }
+            function saveCache(clients) {
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({ clients: clients, cachedAt: Date.now() }));
+                } catch (e) { console.warn('[Cache] Write failed:', e); }
+            }
+
+            // ── Overlay helpers ───────────────────────────────────────────────
+            function showOverlay(text) {
+                var el = document.getElementById('loading-overlay');
+                var txt = document.getElementById('loading-text');
+                if (!el) return;
+                if (txt) txt.textContent = text;
+                el.classList.add('visible');
+            }
+            function updateOverlay(text) {
+                var txt = document.getElementById('loading-text');
+                if (txt) txt.textContent = text;
+            }
+            function hideOverlay() {
+                var el = document.getElementById('loading-overlay');
+                if (el) el.classList.remove('visible');
+            }
+
+            // ── GeoJSON / popup helpers ───────────────────────────────────────
+            function clientsToGeoJSON(list) {
+                return {
+                    type: 'FeatureCollection',
+                    features: list
+                        .filter(function (c) { return c.lat != null && c.lng != null; })
+                        .map(function (c, i) {
+                            return {
+                                type: 'Feature',
+                                geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
+                                properties: {
+                                    _index: i, name: c.name || '', color: c.color || '#ef4444',
+                                    phone: c.phone || '', email: c.email || '', contact: c.contact || '',
+                                    address: c.address || '', notes: c.notes || '',
+                                    label: c.label || '', orgTitle: c.orgTitle || ''
+                                }
+                            };
+                        })
+                };
+            }
+            function escapeHtml(text) {
+                if (!text) return '';
+                var div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+            function buildPopupHTML(list) {
+                var html = '<div style="max-height:300px;overflow-y:auto;">';
+                list.forEach(function (c, i) {
+                    html += '<div' + (i > 0 ? ' style="border-top:1px solid #efefef;padding-top:12px;margin-top:12px;"' : '') + '>';
+                    html += '<div class="popup-header">';
+                    var title = list.length > 1 ? '(' + (i + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
+                    html += '<div class="popup-name" style="font-weight:600;font-size:14px;margin-bottom:4px;">' + title + '</div>';
+                    if (c.label) {
+                        var safeColor = /^#[0-9a-fA-F]{3,8}$/.test(c.color) ? c.color : '#ef4444';
+                        html += '<div class="popup-label" style="background-color:' + safeColor +
+                            ';font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;display:inline-block;margin-bottom:8px;">' +
+                            escapeHtml(c.label) + '</div>';
+                    }
+                    html += '</div><div class="popup-body" style="font-size:13px;color:#374151;">';
+                    if (c.address) {
+                        html += '<div class="popup-row" style="display:flex;align-items:start;gap:6px;margin-bottom:4px;">'
+                            + '<span style="font-weight:500;">&#128205;</span> '
+                            + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
+                    }
+                    if (c.notes) {
+                        html += '<div class="popup-notes" style="background:#f3f4f6;padding:6px;border-radius:4px;margin-top:6px;font-style:italic;font-size:12px;">'
+                            + escapeHtml(c.notes) + '</div>';
+                    }
+                    html += '</div></div>';
+                });
+                return html + '</div>';
+            }
+
+            // ── Map source update (called on every new batch) ─────────────────
+            function updateMapSource(clients) {
+                allClients = clients;
+                fullGeoJSON = clientsToGeoJSON(allClients);
+                if (mapLoaded && map && map.getSource('clients')) {
+                    map.getSource('clients').setData(fullGeoJSON);
+                    // Auto-fit only while user hasn't manually navigated
+                    if (!userHasMoved) {
+                        var b = new maplibregl.LngLatBounds();
+                        allClients.forEach(function (c) {
+                            if (c.lat != null && c.lng != null) b.extend([c.lng, c.lat]);
+                        });
+                        if (!b.isEmpty()) map.fitBounds(b, { padding: 50, maxZoom: 12, duration: 600 });
+                    }
+                }
+            }
+
+            // ── Map initialisation ────────────────────────────────────────────
+            function initMap(initialClients) {
+                allClients = initialClients;
+                fullGeoJSON = clientsToGeoJSON(allClients);
+
+                map = new maplibregl.Map({
+                    container: 'map',
+                    style: {
+                        version: 8,
+                        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+                        sources: {
+                            osm: {
+                                type: 'raster',
+                                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                                tileSize: 256,
+                                attribution: '&copy; OpenStreetMap contributors'
+                            }
+                        },
+                        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+                    },
+                    center: [30.5241361, 50.4500336],
+                    zoom: 5
+                });
+
+                // Track deliberate user navigation
+                map.on('movestart', function (e) { if (e.originalEvent) userHasMoved = true; });
+
+                map.on('load', function () {
+                    mapLoaded = true;
+
+                    map.addSource('clients', { type: 'geojson', data: fullGeoJSON });
+
+                    map.addLayer({
+                        id: 'unclustered-point',
+                        type: 'circle',
+                        source: 'clients',
+                        paint: {
+                            'circle-color': '#ef4444',
+                            'circle-radius': 8,
+                            'circle-stroke-width': 2,
+                            'circle-stroke-color': '#ffffff'
+                        }
+                    });
+
+                    // Popup on click
+                    map.on('click', 'unclustered-point', function (e) {
+                        var feature = e.features[0];
+                        var coords = feature.geometry.coordinates.slice();
+                        var props = feature.properties;
+                        var colocated = allClients.filter(function (c) {
+                            return c.lat != null && c.lng != null &&
+                                c.lat.toFixed(6) === coords[1].toFixed(6) &&
+                                c.lng.toFixed(6) === coords[0].toFixed(6);
+                        });
+                        var popupClients = colocated.length > 0 ? colocated : [{
+                            name: props.name, color: props.color, phone: props.phone,
+                            email: props.email, contact: props.contact, address: props.address,
+                            notes: props.notes, label: props.label, orgTitle: props.orgTitle
+                        }];
+                        while (Math.abs(e.lngLat.lng - coords[0]) > 180) {
+                            coords[0] += e.lngLat.lng > coords[0] ? 360 : -360;
+                        }
+                        new maplibregl.Popup({ maxWidth: '320px' })
+                            .setLngLat(coords).setHTML(buildPopupHTML(popupClients)).addTo(map);
+                    });
+
+                    map.on('mouseenter', 'unclustered-point', function () { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'unclustered-point', function () { map.getCanvas().style.cursor = ''; });
+
+                    // Initial bounds fit
+                    if (!userHasMoved) {
+                        var b = new maplibregl.LngLatBounds();
+                        allClients.forEach(function (c) { if (c.lat != null && c.lng != null) b.extend([c.lng, c.lat]); });
+                        if (!b.isEmpty()) map.fitBounds(b, { padding: 50, maxZoom: 12 });
+                    }
+
+                    // ── Search ──────────────────────────────────────────────
+                    var searchInput = document.getElementById('search');
+                    var searchWrapper = document.querySelector('.search-wrapper');
+                    var suggestionsBox = document.getElementById('suggestions');
+                    var clearBtn = document.getElementById('clear-btn');
+                    var debounceTimer = null;
+                    var countryFilter = document.getElementById('country-filter');
+                    var regionFilter = document.getElementById('region-filter');
+
+                    function matchesCountry(c, country) {
+                        if (!country) return true;
+                        if (country === '\u0413\u0440\u0443\u0437\u0456\u044f') return c.address && (c.address.includes('Georgia') || c.address.includes('\u0413\u0440\u0443\u0437\u0456\u044f'));
+                        if (country === '\u0423\u043a\u0440\u0430\u0457\u043d\u0430') return !c.address || (!c.address.includes('Georgia') && !c.address.includes('\u0413\u0440\u0443\u0437\u0456\u044f'));
+                        return c.address && c.address.includes(country);
+                    }
+
+                    function filterMapByQuery(q) {
+                        var country = countryFilter.value;
+                        var region = regionFilter.value;
+                        var filtered = allClients.filter(function (c) {
+                            var cm = matchesCountry(c, country);
+                            var rm = !region || (c.address && c.address.includes(region));
+                            return cm && rm;
+                        });
+                        if (q && q.trim()) {
+                            var ql = q.trim().toLowerCase();
+                            filtered = filtered.filter(function (c) {
+                                return [c.name, c.address, c.contact, c.phone]
+                                    .filter(Boolean).join(' ').toLowerCase().indexOf(ql) !== -1;
+                            });
+                        }
+                        map.getSource('clients').setData(clientsToGeoJSON(filtered));
+                    }
+
+                    function showSuggestions(q) {
+                        var ql = (q || '').trim().toLowerCase();
+                        suggestionsBox.innerHTML = '';
+                        if (!ql) { suggestionsBox.style.display = 'none'; return; }
+                        var matches = allClients.filter(function (c) {
+                            return [c.name, c.address, c.contact, c.phone]
+                                .filter(Boolean).join(' ').toLowerCase().indexOf(ql) !== -1;
+                        }).slice(0, 10);
+                        if (!matches.length) { suggestionsBox.style.display = 'none'; return; }
+                        matches.forEach(function (client) {
+                            var div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            div.textContent = client.name + (client.address ? ' (' + client.address + ')' : '');
+                            div.addEventListener('click', function () {
+                                map.getSource('clients').setData(fullGeoJSON);
+                                map.flyTo({ center: [client.lng, client.lat], zoom: Math.max(map.getZoom(), 14), essential: true });
+                                map.once('moveend', function () {
+                                    var colocated = allClients.filter(function (c) {
+                                        return c.lat != null && c.lng != null &&
+                                            c.lat.toFixed(6) === client.lat.toFixed(6) &&
+                                            c.lng.toFixed(6) === client.lng.toFixed(6);
+                                    });
+                                    new maplibregl.Popup({ maxWidth: '320px' })
+                                        .setLngLat([client.lng, client.lat])
+                                        .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [client]))
+                                        .addTo(map);
+                                });
+                                searchInput.value = client.name;
+                                suggestionsBox.style.display = 'none';
+                                clearBtn.style.display = 'flex';
+                            });
+                            suggestionsBox.appendChild(div);
+                        });
+                        suggestionsBox.style.display = 'block';
+                    }
+
+                    searchInput.addEventListener('input', function (e) {
+                        var val = e.target.value;
+                        clearBtn.style.display = val ? 'flex' : 'none';
+                        showSuggestions(val);
+                        clearTimeout(debounceTimer);
+                        debounceTimer = setTimeout(function () { filterMapByQuery(val); }, 200);
+                    });
+                    clearBtn.addEventListener('click', function () {
+                        searchInput.value = '';
+                        filterMapByQuery('');
+                        suggestionsBox.style.display = 'none';
+                        clearBtn.style.display = 'none';
+                    });
+                    document.addEventListener('click', function (e) {
+                        if (!searchWrapper.contains(e.target)) suggestionsBox.style.display = 'none';
+                    });
+
+                    // ── Filters ──────────────────────────────────────────────
+                    function flyToClients(list, maxZoom) {
+                        if (!list.length) return;
+                        var b = new maplibregl.LngLatBounds();
+                        list.forEach(function (c) { if (c.lat != null && c.lng != null) b.extend([c.lng, c.lat]); });
+                        if (!b.isEmpty()) map.fitBounds(b, { padding: 60, maxZoom: maxZoom || 10, duration: 1200 });
+                    }
+
+                    countryFilter.addEventListener('change', function () {
+                        var country = countryFilter.value;
+                        if (country === '\u0413\u0440\u0443\u0437\u0456\u044f') {
+                            regionFilter.value = '';
+                            regionFilter.disabled = true;
+                        } else {
+                            regionFilter.disabled = false;
+                        }
+                        filterMapByQuery(searchInput.value);
+                        flyToClients(allClients.filter(function (c) { return matchesCountry(c, country); }),
+                            country === '\u0413\u0440\u0443\u0437\u0456\u044f' ? 12 : 7);
+                    });
+
+                    regionFilter.addEventListener('change', function () {
+                        filterMapByQuery(searchInput.value);
+                        var region = regionFilter.value;
+                        if (region) {
+                            var country = countryFilter.value;
+                            flyToClients(allClients.filter(function (c) {
+                                return matchesCountry(c, country) && c.address && c.address.includes(region);
+                            }), 10);
+                        }
+                    });
+
+                    // ── Reset ────────────────────────────────────────────────
+                    document.getElementById('reset-btn').addEventListener('click', function () {
+                        map.getSource('clients').setData(fullGeoJSON);
+                        searchInput.value = '';
+                        clearBtn.style.display = 'none';
+                        suggestionsBox.style.display = 'none';
+                        countryFilter.value = '';
+                        regionFilter.value = '';
+                        regionFilter.disabled = false;
+                        userHasMoved = false; // allow auto-fit again after reset
+                        var b2 = new maplibregl.LngLatBounds();
+                        allClients.forEach(function (c) { if (c.lat != null && c.lng != null) b2.extend([c.lng, c.lat]); });
+                        if (!b2.isEmpty()) map.fitBounds(b2, { padding: 50, maxZoom: 12, duration: 800 });
+                    });
+
+                    // ── Sidebar toggle (desktop) ──────────────────────────────
+                    var sidebarToggle = document.getElementById('sidebar-toggle');
+                    var widgetRoot = document.getElementById('widget-root');
+                    sidebarToggle.addEventListener('click', function () {
+                        var collapsed = widgetRoot.classList.toggle('sidebar-collapsed');
+                        sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+                        sidebarToggle.innerHTML = collapsed ? '&#x276F;' : '&#x276E;';
+                        setTimeout(function () { map.resize(); }, 300);
+                    });
+
+                    // ── Burger (mobile) ───────────────────────────────────────
+                    var sidebar = document.getElementById('sidebar');
+                    var burgerBtn = document.getElementById('burger-btn');
+                    var backdrop = document.getElementById('sidebar-backdrop');
+                    var closeBtn = document.getElementById('sidebar-close-btn');
+                    function openSidebar() {
+                        sidebar.classList.add('mobile-open');
+                        backdrop.classList.add('active');
+                        burgerBtn.setAttribute('aria-expanded', 'true');
+                    }
+                    function closeSidebar() {
+                        sidebar.classList.remove('mobile-open');
+                        backdrop.classList.remove('active');
+                        burgerBtn.setAttribute('aria-expanded', 'false');
+                    }
+                    burgerBtn.addEventListener('click', openSidebar);
+                    closeBtn.addEventListener('click', closeSidebar);
+                    backdrop.addEventListener('click', closeSidebar);
+                }); // end map.on('load')
+            } // end initMap
+
+            // ── SSE loader ────────────────────────────────────────────────────
+            function streamFromNotion(onBatch, onDone, onError) {
+                var es = new EventSource('/api/notion-clients/stream');
+                es.addEventListener('batch', function (e) {
+                    try { onBatch(JSON.parse(e.data)); }
+                    catch (err) { console.warn('[SSE] Parse error:', err); }
+                });
+                es.addEventListener('done', function (e) {
+                    es.close();
+                    try { onDone(JSON.parse(e.data)); } catch (err) { onDone({}); }
+                });
+                es.addEventListener('error', function (e) {
+                    // Server-emitted error event
+                    es.close();
+                    try { var d = JSON.parse(e.data); onError(new Error(d.message || 'SSE error')); }
+                    catch (err) { onError(new Error('SSE error')); }
+                });
+                es.onerror = function () {
+                    if (es.readyState === EventSource.CLOSED) {
+                        onError(new Error('SSE connection closed'));
+                    }
+                };
+                return es;
+            }
+
+            // ── Main orchestration ────────────────────────────────────────────
+            (function main() {
+                var cached = tryGetCache();
+                var freshClients = [];
+                var mapInitialized = false;
+
+                function initOnce(clients) {
+                    if (mapInitialized) return;
+                    mapInitialized = true;
+                    if (!clients.length) {
+                        document.getElementById('map').innerHTML =
+                            '<div style="color:#dd3a28;padding:2em;font-size:14px;">\u041d\u0435\u043c\u0430\u0454 \u0434\u0430\u043d\u0438\u0445. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0442\u0435 \u043f\u0456\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043d\u044f.</div>';
+                        return;
+                    }
+                    initMap(clients);
+                }
+
+                // ── 1. Fresh cache: use immediately, skip SSE ─────────────────
+                if (cached && !cached.stale) {
+                    initOnce(cached.clients);
+                    return;
+                }
+
+                // ── 2. Stale cache: show right away, refresh via SSE silently ─
+                if (cached && cached.clients.length > 0) {
+                    allClients = cached.clients.slice();
+                    initOnce(cached.clients);
+                    // mapInitialized = true now, but we continue to SSE below
+                }
+
+                // ── 3. file:// fallback ───────────────────────────────────────
+                if (window.location.protocol === 'file:') {
+                    if (!mapInitialized) {
+                        initOnce(window.clients && Array.isArray(window.clients) ? window.clients : []);
+                    }
+                    return;
+                }
+
+                // ── 4. Stream from Notion via SSE ─────────────────────────────
+                if (!mapInitialized) {
+                    showOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                }
+
+                var sseActive = true;
+                var fallbackStarted = false;
+                streamFromNotion(
+                    function onBatch(batch) {
+                        if (!sseActive) return;
+                        freshClients = freshClients.concat(batch);
+
+                        if (!mapInitialized) {
+                            // First batch: boot the map
+                            initOnce(freshClients.slice());
+                            updateOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f: ' + freshClients.length + ' \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                        } else {
+                            // Subsequent batches: live-update the map source
+                            updateMapSource(freshClients.slice());
+                            // Show overlay only when doing a background refresh (not stale-revalidate)
+                            if (!cached || !cached.stale) {
+                                updateOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f: ' + freshClients.length + ' \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                            }
+                        }
+                    },
+                    function onDone(data) {
+                        sseActive = false;
+                        hideOverlay();
+                        if (freshClients.length > 0) {
+                            saveCache(freshClients);
+                            allClients = freshClients.slice();
+                            fullGeoJSON = clientsToGeoJSON(allClients);
+                            if (mapLoaded && map && map.getSource('clients')) {
+                                map.getSource('clients').setData(fullGeoJSON);
+                            }
+                        }
+                        if (!mapInitialized) {
+                            initOnce(freshClients.length ? freshClients : []);
+                        }
+                        console.info('[SSE] Done. Total clients:', (data && data.total) || freshClients.length);
+                    },
+                    function onError(err) {
+                        sseActive = false;
+                        hideOverlay();
+                        console.warn('[SSE] Error:', err.message);
+                        if (!mapInitialized && !fallbackStarted) {
+                            fallbackStarted = true;
+                            // Fallback: stale cache → clients.json
+                            var staleOrStatic = (cached && cached.clients.length > 0)
+                                ? cached.clients : null;
+                            if (staleOrStatic) {
+                                initOnce(staleOrStatic);
+                            } else {
+                                fetch('clients.json')
+                                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                                    .then(function (data) { initOnce(Array.isArray(data) ? data : []); })
+                                    .catch(function (e) { console.error('[Fallback] clients.json failed:', e); initOnce([]); });
+                            }
+                        }
+                    }
+                );
+            })();
+
+        })();
+    </script>
+</body>
+
+</html>

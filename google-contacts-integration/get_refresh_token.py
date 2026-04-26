@@ -19,7 +19,7 @@ def main():
             "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables first."
         )
 
-    client_config = {
+    client_config: dict[str, object] = {
         "installed": {
             "client_id": client_id,
             "client_secret": client_secret,
@@ -43,9 +43,9 @@ def main():
         prompt="consent",
     )
 
-    with open("sync_token.txt", "w", encoding="UTF-8") as sync_token_file:
-        sync_token_file.write(str(creds.refresh_token))
-        print("Refresh token saved to sync_token.txt.")
+    with open("refresh_token.txt", "w", encoding="UTF-8") as refresh_token_file:
+        refresh_token_file.write(str(creds.refresh_token))
+        print("Refresh token saved to refresh_token.txt.")
 
     # TODO: Updating .env file does not work.
     os.environ.update({"GOOGLE_REFRESH_TOKEN": str(creds.refresh_token)})
