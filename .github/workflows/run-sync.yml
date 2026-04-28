@@ -97,12 +97,6 @@ jobs:
           path: sync_token.txt
           key: sync-token-${{ github.run_number }}
 
-      - name: Notion duplicate cleanup (timeboxed)
-        env:
-          DEDUP_MAX_MINUTES: 20
-        run: |
-          python google-contacts-integration/main.py --phase dedup --dedup-max-minutes "$DEDUP_MAX_MINUTES"
-
       - name: Save dedup checkpoint
         if: always() && hashFiles('dedup_checkpoint.json') != ''
         uses: actions/cache/save@v4
