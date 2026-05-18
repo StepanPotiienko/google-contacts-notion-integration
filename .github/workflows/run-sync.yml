@@ -28,6 +28,7 @@ jobs:
       NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
       CRM_DATABASE_ID: ${{ secrets.CRM_DATABASE_ID }}
       PRODUCTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
 
     steps:
       - name: Checkout repo
@@ -70,22 +71,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Decrypt Google refresh token (GPG)
-        env:
-          GOOGLE_REFRESH_TOKEN_PASSPHRASE: ${{ secrets.GOOGLE_REFRESH_TOKEN_PASSPHRASE }}
-        run: |
-          set -euo pipefail
-          test -s google-contacts-integration/secrets/google_refresh_token.txt.gpg
-          gpg --batch --yes --quiet --pinentry-mode loopback \
-            --decrypt --passphrase "$GOOGLE_REFRESH_TOKEN_PASSPHRASE" \
-            --output /tmp/google_refresh_token.txt \
-            google-contacts-integration/secrets/google_refresh_token.txt.gpg
-          GOOGLE_REFRESH_TOKEN="$(tr -d '\r\n' < /tmp/google_refresh_token.txt | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-          rm -f /tmp/google_refresh_token.txt
-          test -n "$GOOGLE_REFRESH_TOKEN"
-          echo "::add-mask::$GOOGLE_REFRESH_TOKEN"
-          echo "GOOGLE_REFRESH_TOKEN=$GOOGLE_REFRESH_TOKEN" >> "$GITHUB_ENV"
 
       - name: Google contacts sync (fast)
         run: python google-contacts-integration/main.py --phase google-sync
