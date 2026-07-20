@@ -31,7 +31,7 @@ clients_store.json
 sync_token.txt
 
 # Ignore large generated clients array used by widget
-# Widget Generator Tool/public/clients_array.js
+Widget Generator Tool/public/clients_array.js
 
 
 sync_token.txt
