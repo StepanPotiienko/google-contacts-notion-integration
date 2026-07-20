@@ -871,6 +871,42 @@
                         }
                     });
 
+                    // ── Custom lion-head marker for Агропрайд ТОВ ──────────────
+                    var agroprideClient = allClients.find(function (c) { return c.name === 'Агропрайд ТОВ'; });
+                    if (agroprideClient && agroprideClient.lat != null && agroprideClient.lng != null) {
+                        var logoEl = document.createElement('div');
+                        logoEl.style.width = '36px';
+                        logoEl.style.height = '36px';
+                        logoEl.style.borderRadius = '50%';
+                        logoEl.style.backgroundColor = '#dd3a28';
+                        logoEl.style.display = 'flex';
+                        logoEl.style.alignItems = 'center';
+                        logoEl.style.justifyContent = 'center';
+                        logoEl.style.boxShadow = '0 2px 8px rgba(221,58,40,0.5)';
+                        logoEl.style.cursor = 'pointer';
+                        var lionImg = document.createElement('img');
+                        lionImg.src = 'agropride-lion.svg';
+                        lionImg.style.width = '24px';
+                        lionImg.style.height = '26px';
+                        lionImg.style.pointerEvents = 'none';
+                        logoEl.appendChild(lionImg);
+                        var logoMarker = new maplibregl.Marker({ element: logoEl, anchor: 'center' })
+                            .setLngLat([agroprideClient.lng, agroprideClient.lat])
+                            .addTo(map);
+                        // Click on logo opens the same popup
+                        logoEl.addEventListener('click', function () {
+                            var colocated = allClients.filter(function (c) {
+                                return c.lat != null && c.lng != null &&
+                                    c.lat.toFixed(6) === agroprideClient.lat.toFixed(6) &&
+                                    c.lng.toFixed(6) === agroprideClient.lng.toFixed(6);
+                            });
+                            new maplibregl.Popup({ maxWidth: '320px' })
+                                .setLngLat([agroprideClient.lng, agroprideClient.lat])
+                                .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [agroprideClient]))
+                                .addTo(map);
+                        });
+                    }
+
                     // Popup on click
                     map.on('click', 'unclustered-point', function (e) {
                         var feature = e.features[0];
