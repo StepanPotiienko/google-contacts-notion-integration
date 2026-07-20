@@ -4,10 +4,10 @@ public/geocode_cache.json
 geocode_cache.json
 
 # Generated client snapshots — contain personal data, never commit
-public/clients_array.js
+# public/clients_array.js
 public/clients_store.json
 clients_store.json
-clients_array.js
+# clients_array.js
 
 # ── Environment / secrets ──────────────────────────────────────────────────────
 .env
