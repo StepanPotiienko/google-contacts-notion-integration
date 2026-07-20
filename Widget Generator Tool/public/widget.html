@@ -871,9 +871,10 @@
                         }
                     });
 
-                    // ── Custom lion-head marker for Агропрайд ТОВ ──────────────
-                    var agroprideClient = allClients.find(function (c) { return c.name === 'Агропрайд ТОВ'; });
-                    if (agroprideClient && agroprideClient.lat != null && agroprideClient.lng != null) {
+                    // ── Static lion-head marker for Агропрайд ТОВ ──────────────
+                    (function () {
+                        var agroprideLng = 33.4507977;
+                        var agroprideLat = 49.1595206;
                         var logoEl = document.createElement('div');
                         logoEl.style.width = '36px';
                         logoEl.style.height = '36px';
@@ -891,21 +892,16 @@
                         lionImg.style.pointerEvents = 'none';
                         logoEl.appendChild(lionImg);
                         var logoMarker = new maplibregl.Marker({ element: logoEl, anchor: 'center' })
-                            .setLngLat([agroprideClient.lng, agroprideClient.lat])
+                            .setLngLat([agroprideLng, agroprideLat])
                             .addTo(map);
-                        // Click on logo opens the same popup
                         logoEl.addEventListener('click', function () {
-                            var colocated = allClients.filter(function (c) {
-                                return c.lat != null && c.lng != null &&
-                                    c.lat.toFixed(6) === agroprideClient.lat.toFixed(6) &&
-                                    c.lng.toFixed(6) === agroprideClient.lng.toFixed(6);
-                            });
+                            var client = { name: 'Агропрайд ТОВ', color: '#ef4444', phone: '', email: '', contact: '', address: 'Полтавська обл., м. Кременчук, Галузевий проїзд, 30', notes: '', label: '', orgTitle: '' };
                             new maplibregl.Popup({ maxWidth: '320px' })
-                                .setLngLat([agroprideClient.lng, agroprideClient.lat])
-                                .setHTML(buildPopupHTML(colocated.length > 0 ? colocated : [agroprideClient]))
+                                .setLngLat([agroprideLng, agroprideLat])
+                                .setHTML(buildPopupHTML([client]))
                                 .addTo(map);
                         });
-                    }
+                    })();
 
                     // Popup on click
                     map.on('click', 'unclustered-point', function (e) {
