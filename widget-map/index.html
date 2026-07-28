@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 
 <head>
     <meta charset="UTF-8" />
@@ -570,6 +570,93 @@
             padding-top: 8px;
             border-top: 1px solid #e5e7eb;
         }
+
+        /* ── Language switcher ── */
+        .language {
+            position: absolute;
+            top: var(--space-md);
+            right: var(--space-md);
+            z-index: 10004;
+            font-family: 'Rubik', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .current-lang {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--color-bg-sidebar);
+            color: var(--color-text-primary);
+            border: 1px solid var(--color-border-strong);
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+            min-height: var(--tap-target);
+            white-space: nowrap;
+        }
+
+        .current-lang:hover {
+            background: var(--color-bg-input);
+        }
+
+        .current-lang .lang-arrow {
+            width: 10px;
+            height: 10px;
+            transition: transform var(--transition);
+            flex-shrink: 0;
+        }
+
+        .language.open .current-lang .lang-arrow {
+            transform: rotate(180deg);
+        }
+
+        .lang-list {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            min-width: 100%;
+            background: var(--color-bg-sidebar);
+            border: 1px solid var(--color-border-strong);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .language.open .lang-list {
+            display: block;
+        }
+
+        .lang-item {
+            list-style: none;
+        }
+
+        .lang-link {
+            display: block;
+            padding: 8px 12px;
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition);
+            white-space: nowrap;
+        }
+
+        .lang-link:hover {
+            background: var(--color-accent);
+            color: #fff;
+        }
+
+        .lang-item.active .lang-link {
+            color: var(--color-accent);
+            font-weight: 700;
+        }
     </style>
 </head>
 
@@ -577,11 +664,11 @@
     <div id="widget-root">
 
         <!-- Sidebar: complementary landmark with search + filters -->
-        <aside id="sidebar" aria-label="Client filters and search">
+        <aside id="sidebar" aria-label="Client filters and search" data-i18n-attr="aria-label:sidebar.aria_label">
             <div id="sidebar-inner">
 
                 <header id="sidebar-header">
-                    <span id="sidebar-title">Клієнти</span>
+                    <span id="sidebar-title" data-i18n="sidebar.title">Клієнти</span>
                     <button id="sidebar-close-btn" aria-label="Close sidebar">&#x2715;</button>
                 </header>
 
@@ -593,52 +680,52 @@
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         <input id="search" type="search" placeholder="Пошук..." autocomplete="off"
-                            aria-label="Search clients" />
+                            aria-label="Search clients" data-i18n-attr="placeholder:search.placeholder" />
                         <button id="clear-btn" aria-label="Clear search">&#x00D7;</button>
                         <div id="suggestions" class="suggestions" role="listbox" aria-label="Search suggestions"></div>
                     </div>
                 </section>
 
                 <section class="filter-section" aria-label="Filter by location">
-                    <label class="filter-label" for="country-filter">Країна</label>
+                    <label class="filter-label" for="country-filter" data-i18n="filter.country.label">Країна</label>
                     <select class="filter-select" id="country-filter">
-                        <option value="">Країна</option>
-                        <option value="Україна">Україна</option>
-                        <option value="Грузія">Грузія</option>
+                        <option value="" data-i18n="filter.country.all">Країна</option>
+                        <option value="Україна" data-i18n="filter.country.ukraine">Україна</option>
+                        <option value="Грузія" data-i18n="filter.country.georgia">Грузія</option>
                     </select>
                 </section>
 
                 <section class="filter-section" aria-label="Filter by region">
-                    <label class="filter-label" for="region-filter">Область</label>
+                    <label class="filter-label" for="region-filter" data-i18n="filter.region.label">Область</label>
                     <select class="filter-select" id="region-filter">
-                        <option value="">Область</option>
-                        <option value="Вінницька">Вінницька</option>
-                        <option value="Волинська">Волинська</option>
-                        <option value="Дніпропетровська">Дніпропетровська</option>
-                        <option value="Донецька">Донецька</option>
-                        <option value="Житомирська">Житомирська</option>
-                        <option value="Закарпатська">Закарпатська</option>
-                        <option value="Запорізька">Запорізька</option>
-                        <option value="Івано-Франківська">Івано-Франківська</option>
-                        <option value="Київська">Київська</option>
-                        <option value="Кіровоградська">Кіровоградська</option>
-                        <option value="Луганська">Луганська</option>
-                        <option value="Львівська">Львівська</option>
-                        <option value="Миколаївська">Миколаївська</option>
-                        <option value="Одеська">Одеська</option>
-                        <option value="Полтавська">Полтавська</option>
-                        <option value="Рівненська">Рівненська</option>
-                        <option value="Сумська">Сумська</option>
-                        <option value="Тернопільська">Тернопільська</option>
-                        <option value="Харківська">Харківська</option>
-                        <option value="Херсонська">Херсонська</option>
-                        <option value="Хмельницька">Хмельницька</option>
-                        <option value="Черкаська">Черкаська</option>
-                        <option value="Чернівецька">Чернівецька</option>
-                        <option value="Чернігівська">Чернігівська</option>
-                        <option value="м.Київ">м.Київ</option>
-                        <option value="м.Севастополь">м.Севастополь</option>
-                        <option value="АР Крим">АР Крим</option>
+                        <option value="" data-i18n="filter.region.all">Область</option>
+                        <option value="Вінницька" data-i18n="region.Вінницька">Вінницька</option>
+                        <option value="Волинська" data-i18n="region.Волинська">Волинська</option>
+                        <option value="Дніпропетровська" data-i18n="region.Дніпропетровська">Дніпропетровська</option>
+                        <option value="Донецька" data-i18n="region.Донецька">Донецька</option>
+                        <option value="Житомирська" data-i18n="region.Житомирська">Житомирська</option>
+                        <option value="Закарпатська" data-i18n="region.Закарпатська">Закарпатська</option>
+                        <option value="Запорізька" data-i18n="region.Запорізька">Запорізька</option>
+                        <option value="Івано-Франківська" data-i18n="region.Івано-Франківська">Івано-Франківська</option>
+                        <option value="Київська" data-i18n="region.Київська">Київська</option>
+                        <option value="Кіровоградська" data-i18n="region.Кіровоградська">Кіровоградська</option>
+                        <option value="Луганська" data-i18n="region.Луганська">Луганська</option>
+                        <option value="Львівська" data-i18n="region.Львівська">Львівська</option>
+                        <option value="Миколаївська" data-i18n="region.Миколаївська">Миколаївська</option>
+                        <option value="Одеська" data-i18n="region.Одеська">Одеська</option>
+                        <option value="Полтавська" data-i18n="region.Полтавська">Полтавська</option>
+                        <option value="Рівненська" data-i18n="region.Рівненська">Рівненська</option>
+                        <option value="Сумська" data-i18n="region.Сумська">Сумська</option>
+                        <option value="Тернопільська" data-i18n="region.Тернопільська">Тернопільська</option>
+                        <option value="Харківська" data-i18n="region.Харківська">Харківська</option>
+                        <option value="Херсонська" data-i18n="region.Херсонська">Херсонська</option>
+                        <option value="Хмельницька" data-i18n="region.Хмельницька">Хмельницька</option>
+                        <option value="Черкаська" data-i18n="region.Черкаська">Черкаська</option>
+                        <option value="Чернівецька" data-i18n="region.Чернівецька">Чернівецька</option>
+                        <option value="Чернігівська" data-i18n="region.Чернігівська">Чернігівська</option>
+                        <option value="м.Київ" data-i18n="region.м.Київ">м.Київ</option>
+                        <option value="м.Севастополь" data-i18n="region.м.Севастополь">м.Севастополь</option>
+                        <option value="АР Крим" data-i18n="region.АР Крим">АР Крим</option>
                     </select>
                 </section>
 
@@ -647,7 +734,7 @@
                         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                         <path d="M3 3v5h5" />
                     </svg>
-                    Скинути
+                    <span data-i18n="filter.reset">Скинути</span>
                 </button>
 
             </div>
@@ -658,6 +745,21 @@
             <button id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="true">&#x276E;</button>
             <button id="burger-btn" aria-label="Open sidebar" aria-controls="sidebar">&#x2630;</button>
             <div id="map" role="application" aria-label="Interactive map"></div>
+
+            <!-- Language switcher -->
+            <div class="language" id="lang-switcher">
+                <div class="current-lang" id="lang-current" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="lang-current-label">UA</span>
+                    <svg class="lang-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
+                <ul class="lang-list" id="lang-list" role="listbox">
+                    <li class="lang-item" data-lang="ua"><span class="lang-link">UA</span></li>
+                    <li class="lang-item" data-lang="ru"><span class="lang-link">RU</span></li>
+                    <li class="lang-item" data-lang="en"><span class="lang-link">EN</span></li>
+                </ul>
+            </div>
         </main>
 
     </div>
@@ -692,7 +794,7 @@
             border-radius:50%;
             animation:spin 0.7s linear infinite;
         "></span>
-        <span id="loading-text">Завантаження...</span>
+        <span id="loading-text" data-i18n="loading.short">Завантаження...</span>
     </div>
     <style>
         @keyframes spin {
@@ -710,6 +812,252 @@
         }
     </style>
 
+    <script>
+        // ── i18n (UA/RU/EN) ────────────────────────────────────────────────
+        var I18N = {
+            lang: 'ua',
+            LANG_KEY: 'agropride_widget_lang',
+            LANG_LABELS: { ua: 'UA', ru: 'RU', en: 'EN' },
+            dict: {
+                ua: {
+                    'sidebar.title': 'Клієнти',
+                    'sidebar.aria_label': 'Пошук та фільтри клієнтів',
+                    'search.placeholder': 'Пошук...',
+                    'filter.country.label': 'Країна',
+                    'filter.country.all': 'Країна',
+                    'filter.country.ukraine': 'Україна',
+                    'filter.country.georgia': 'Грузія',
+                    'filter.region.label': 'Область',
+                    'filter.region.all': 'Область',
+                    'filter.reset': 'Скинути',
+                    'loading.short': 'Завантаження...',
+                    'loading.clients': 'Завантаження клієнтів...',
+                    'loading.progress': 'Завантаження: {n} клієнтів...',
+                    'error.no_data': 'Немає даних. Перевірте підключення.',
+                    'region.Вінницька': 'Вінницька',
+                    'region.Волинська': 'Волинська',
+                    'region.Дніпропетровська': 'Дніпропетровська',
+                    'region.Донецька': 'Донецька',
+                    'region.Житомирська': 'Житомирська',
+                    'region.Закарпатська': 'Закарпатська',
+                    'region.Запорізька': 'Запорізька',
+                    'region.Івано-Франківська': 'Івано-Франківська',
+                    'region.Київська': 'Київська',
+                    'region.Кіровоградська': 'Кіровоградська',
+                    'region.Луганська': 'Луганська',
+                    'region.Львівська': 'Львівська',
+                    'region.Миколаївська': 'Миколаївська',
+                    'region.Одеська': 'Одеська',
+                    'region.Полтавська': 'Полтавська',
+                    'region.Рівненська': 'Рівненська',
+                    'region.Сумська': 'Сумська',
+                    'region.Тернопільська': 'Тернопільська',
+                    'region.Харківська': 'Харківська',
+                    'region.Херсонська': 'Херсонська',
+                    'region.Хмельницька': 'Хмельницька',
+                    'region.Черкаська': 'Черкаська',
+                    'region.Чернівецька': 'Чернівецька',
+                    'region.Чернігівська': 'Чернігівська',
+                    'region.м.Київ': 'м.Київ',
+                    'region.м.Севастополь': 'м.Севастополь',
+                    'region.АР Крим': 'АР Крим'
+                },
+                ru: {
+                    'sidebar.title': 'Клиенты',
+                    'sidebar.aria_label': 'Поиск и фильтры клиентов',
+                    'search.placeholder': 'Поиск...',
+                    'filter.country.label': 'Страна',
+                    'filter.country.all': 'Страна',
+                    'filter.country.ukraine': 'Украина',
+                    'filter.country.georgia': 'Грузия',
+                    'filter.region.label': 'Область',
+                    'filter.region.all': 'Область',
+                    'filter.reset': 'Сбросить',
+                    'loading.short': 'Загрузка...',
+                    'loading.clients': 'Загрузка клиентов...',
+                    'loading.progress': 'Загрузка: {n} клиентов...',
+                    'error.no_data': 'Нет данных. Проверьте подключение.',
+                    'region.Вінницька': 'Вінницька',
+                    'region.Волинська': 'Волинська',
+                    'region.Дніпропетровська': 'Дніпропетровська',
+                    'region.Донецька': 'Донецька',
+                    'region.Житомирська': 'Житомирська',
+                    'region.Закарпатська': 'Закарпатська',
+                    'region.Запорізька': 'Запорізька',
+                    'region.Івано-Франківська': 'Івано-Франківська',
+                    'region.Київська': 'Київська',
+                    'region.Кіровоградська': 'Кіровоградська',
+                    'region.Луганська': 'Луганська',
+                    'region.Львівська': 'Львівська',
+                    'region.Миколаївська': 'Миколаївська',
+                    'region.Одеська': 'Одеська',
+                    'region.Полтавська': 'Полтавська',
+                    'region.Рівненська': 'Рівненська',
+                    'region.Сумська': 'Сумська',
+                    'region.Тернопільська': 'Тернопільська',
+                    'region.Харківська': 'Харківська',
+                    'region.Херсонська': 'Херсонська',
+                    'region.Хмельницька': 'Хмельницька',
+                    'region.Черкаська': 'Черкаська',
+                    'region.Чернівецька': 'Чернівецька',
+                    'region.Чернігівська': 'Чернігівська',
+                    'region.м.Київ': 'м.Київ',
+                    'region.м.Севастополь': 'м.Севастополь',
+                    'region.АР Крим': 'АР Крим'
+                },
+                en: {
+                    'sidebar.title': 'Clients',
+                    'sidebar.aria_label': 'Client filters and search',
+                    'search.placeholder': 'Search...',
+                    'filter.country.label': 'Country',
+                    'filter.country.all': 'Country',
+                    'filter.country.ukraine': 'Ukraine',
+                    'filter.country.georgia': 'Georgia',
+                    'filter.region.label': 'Region',
+                    'filter.region.all': 'Region',
+                    'filter.reset': 'Reset',
+                    'loading.short': 'Loading...',
+                    'loading.clients': 'Loading clients...',
+                    'loading.progress': 'Loading: {n} clients...',
+                    'error.no_data': 'No data. Check connection.',
+                    'region.Вінницька': 'Vinnytska',
+                    'region.Волинська': 'Volynska',
+                    'region.Дніпропетровська': 'Dnipropetrovska',
+                    'region.Донецька': 'Donetsk',
+                    'region.Житомирська': 'Zhytomyr',
+                    'region.Закарпатська': 'Zakarpattia',
+                    'region.Запорізька': 'Zaporizka',
+                    'region.Івано-Франківська': 'Ivano-Frankivsk',
+                    'region.Київська': 'Kyiv',
+                    'region.Кіровоградська': 'Kirovohrad',
+                    'region.Луганська': 'Luhansk',
+                    'region.Львівська': 'Lviv',
+                    'region.Миколаївська': 'Mykolaiv',
+                    'region.Одеська': 'Odesa',
+                    'region.Полтавська': 'Poltava',
+                    'region.Рівненська': 'Rivne',
+                    'region.Сумська': 'Sumy',
+                    'region.Тернопільська': 'Ternopil',
+                    'region.Харківська': 'Kharkiv',
+                    'region.Херсонська': 'Kherson',
+                    'region.Хмельницька': 'Khmelnytsky',
+                    'region.Черкаська': 'Cherkasy',
+                    'region.Чернівецька': 'Chernivtsi',
+                    'region.Чернігівська': 'Chernihiv',
+                    'region.м.Київ': 'Kyiv city',
+                    'region.м.Севастополь': 'Sevastopol',
+                    'region.АР Крим': 'Crimea'
+                }
+            },
+
+            init: function () {
+                // 1. Check localStorage
+                var saved = null;
+                try { saved = localStorage.getItem(this.LANG_KEY); } catch (e) {}
+                if (saved && this.dict[saved]) {
+                    this.lang = saved;
+                } else {
+                    // 2. Auto-detect from browser
+                    var bl = (navigator.language || 'uk').toLowerCase();
+                    if (bl.indexOf('ru') === 0) this.lang = 'ru';
+                    else if (bl.indexOf('en') === 0) this.lang = 'en';
+                    else this.lang = 'ua'; // default
+                }
+                this.apply();
+                this.setupSwitcher();
+            },
+
+            t: function (key, params) {
+                var val = (this.dict[this.lang] && this.dict[this.lang][key]) || key;
+                if (params) {
+                    Object.keys(params).forEach(function (k) {
+                        val = val.replace('{' + k + '}', params[k]);
+                    });
+                }
+                return val;
+            },
+
+            apply: function () {
+                var self = this;
+                // text content
+                document.querySelectorAll('[data-i18n]').forEach(function (el) {
+                    el.textContent = self.t(el.getAttribute('data-i18n'));
+                });
+                // attributes: data-i18n-attr="attr:key,attr2:key2"
+                document.querySelectorAll('[data-i18n-attr]').forEach(function (el) {
+                    var pairs = el.getAttribute('data-i18n-attr').split(',');
+                    pairs.forEach(function (pair) {
+                        var parts = pair.trim().split(':');
+                        if (parts.length === 2) {
+                            el.setAttribute(parts[0].trim(), self.t(parts[1].trim()));
+                        }
+                    });
+                });
+                // update switcher label
+                var labelEl = document.getElementById('lang-current-label');
+                if (labelEl) labelEl.textContent = this.LANG_LABELS[this.lang] || 'UA';
+                // update active state
+                document.querySelectorAll('.lang-item').forEach(function (item) {
+                    if (item.getAttribute('data-lang') === self.lang) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+                // update html lang
+                document.documentElement.lang = this.lang === 'ua' ? 'uk' : this.lang;
+            },
+
+            setLang: function (lang) {
+                if (!this.dict[lang]) return;
+                this.lang = lang;
+                try { localStorage.setItem(this.LANG_KEY, lang); } catch (e) {}
+                this.apply();
+            },
+
+            setupSwitcher: function () {
+                var self = this;
+                var switcher = document.getElementById('lang-switcher');
+                var current = document.getElementById('lang-current');
+                if (!switcher || !current) return;
+
+                current.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var isOpen = switcher.classList.toggle('open');
+                    current.setAttribute('aria-expanded', String(isOpen));
+                });
+
+                // keyboard support
+                current.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        var isOpen = switcher.classList.toggle('open');
+                        current.setAttribute('aria-expanded', String(isOpen));
+                    }
+                });
+
+                // language item clicks
+                document.querySelectorAll('.lang-item').forEach(function (item) {
+                    item.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        var lang = item.getAttribute('data-lang');
+                        self.setLang(lang);
+                        switcher.classList.remove('open');
+                        current.setAttribute('aria-expanded', 'false');
+                    });
+                });
+
+                // close on outside click
+                document.addEventListener('click', function () {
+                    switcher.classList.remove('open');
+                    current.setAttribute('aria-expanded', 'false');
+                });
+            }
+        };
+
+        // Run i18n immediately (before map loads)
+        I18N.init();
+    </script>
     <script>
         (function () {
             // ── Constants ──────────────────────────────────────────────────────
@@ -870,38 +1218,6 @@
                             'circle-stroke-color': '#ffffff'
                         }
                     });
-
-                    // ── Static lion-head marker for Агропрайд ТОВ ──────────────
-                    (function () {
-                        var agroprideLng = 33.4507977;
-                        var agroprideLat = 49.1595206;
-                        var logoEl = document.createElement('div');
-                        logoEl.style.width = '36px';
-                        logoEl.style.height = '36px';
-                        logoEl.style.borderRadius = '50%';
-                        logoEl.style.backgroundColor = '#dd3a28';
-                        logoEl.style.display = 'flex';
-                        logoEl.style.alignItems = 'center';
-                        logoEl.style.justifyContent = 'center';
-                        logoEl.style.boxShadow = '0 2px 8px rgba(221,58,40,0.5)';
-                        logoEl.style.cursor = 'pointer';
-                        var lionImg = document.createElement('img');
-                        lionImg.src = 'agropride-lion.svg';
-                        lionImg.style.width = '24px';
-                        lionImg.style.height = '26px';
-                        lionImg.style.pointerEvents = 'none';
-                        logoEl.appendChild(lionImg);
-                        var logoMarker = new maplibregl.Marker({ element: logoEl, anchor: 'center' })
-                            .setLngLat([agroprideLng, agroprideLat])
-                            .addTo(map);
-                        logoEl.addEventListener('click', function () {
-                            var client = { name: 'Агропрайд ТОВ', color: '#ef4444', phone: '', email: '', contact: '', address: 'Полтавська обл., м. Кременчук, Галузевий проїзд, 30', notes: '', label: '', orgTitle: '' };
-                            new maplibregl.Popup({ maxWidth: '320px' })
-                                .setLngLat([agroprideLng, agroprideLat])
-                                .setHTML(buildPopupHTML([client]))
-                                .addTo(map);
-                        });
-                    })();
 
                     // Popup on click
                     map.on('click', 'unclustered-point', function (e) {
@@ -1136,7 +1452,7 @@
                     mapInitialized = true;
                     if (!clients.length) {
                         document.getElementById('map').innerHTML =
-                            '<div style="color:#dd3a28;padding:2em;font-size:14px;">\u041d\u0435\u043c\u0430\u0454 \u0434\u0430\u043d\u0438\u0445. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0442\u0435 \u043f\u0456\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u043d\u044f.</div>';
+                            '<div style="color:#dd3a28;padding:2em;font-size:14px;">' + I18N.t('error.no_data') + '</div>';
                         return;
                     }
                     initMap(clients);
@@ -1165,7 +1481,7 @@
 
                 // ── 4. Stream from Notion via SSE ─────────────────────────────
                 if (!mapInitialized) {
-                    showOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                    showOverlay(I18N.t('loading.clients'));
                 }
 
                 var sseActive = true;
@@ -1178,13 +1494,13 @@
                         if (!mapInitialized) {
                             // First batch: boot the map
                             initOnce(freshClients.slice());
-                            updateOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f: ' + freshClients.length + ' \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                            updateOverlay(I18N.t('loading.progress', { n: freshClients.length }));
                         } else {
                             // Subsequent batches: live-update the map source
                             updateMapSource(freshClients.slice());
                             // Show overlay only when doing a background refresh (not stale-revalidate)
                             if (!cached || !cached.stale) {
-                                updateOverlay('\u0417\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0435\u043d\u043d\u044f: ' + freshClients.length + ' \u043a\u043b\u0456\u0454\u043d\u0442\u0456\u0432...');
+                                updateOverlay(I18N.t('loading.progress', { n: freshClients.length }));
                             }
                         }
                     },
