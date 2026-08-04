@@ -1244,6 +1244,31 @@
                     map.on('mouseenter', 'unclustered-point', function () { map.getCanvas().style.cursor = 'pointer'; });
                     map.on('mouseleave', 'unclustered-point', function () { map.getCanvas().style.cursor = ''; });
 
+                    // ── Agropride office marker (lion-head logo on red circle) ──
+                    var agroEl = document.createElement('div');
+                    agroEl.title = 'Агропрайд ТОВ';
+                    agroEl.style.width = '36px';
+                    agroEl.style.height = '36px';
+                    agroEl.style.borderRadius = '50%';
+                    agroEl.style.backgroundColor = '#dd3a28';
+                    agroEl.style.border = '2px solid #ffffff';
+                    agroEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.35)';
+                    agroEl.style.cursor = 'pointer';
+                    agroEl.style.display = 'flex';
+                    agroEl.style.alignItems = 'center';
+                    agroEl.style.justifyContent = 'center';
+                    agroEl.style.overflow = 'hidden';
+                    var agroImg = document.createElement('img');
+                    agroImg.src = 'agropride-lion.svg';
+                    agroImg.alt = 'Агропрайд ТОВ';
+                    agroImg.style.width = '22px';
+                    agroImg.style.height = 'auto';
+                    agroImg.style.display = 'block';
+                    agroEl.appendChild(agroImg);
+                    new maplibregl.Marker({ element: agroEl, anchor: 'center' })
+                        .setLngLat([33.4566721, 49.1566286])
+                        .addTo(map);
+
                     // Initial bounds fit
                     if (!userHasMoved) {
                         var b = new maplibregl.LngLatBounds();
