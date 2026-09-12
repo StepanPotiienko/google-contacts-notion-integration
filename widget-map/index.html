@@ -1372,7 +1372,7 @@
                         if (region) {
                             var country = countryFilter.value;
                             flyToClients(allClients.filter(function (c) {
-                                return matchesCountry(c, country) && c.address && c.address.includes(region);
+                                return matchesCountry(c, country) && c.region === region;
                             }), 10);
                         }
                     });
@@ -1424,8 +1424,10 @@
             } // end initMap
 
             // ── Loader: read clients from the generated clients.json ─────────
+            // Cache-buster: GitHub Pages serves clients.json with max-age=600,
+            // so a fixed version query forces refetch of the latest geography.
             function streamFromNotion(onBatch, onDone, onError) {
-                fetch('clients.json')
+                fetch('clients.json?v=4')
                     .then(function (r) {
                         if (!r.ok) throw new Error('HTTP ' + r.status);
                         return r.json();
