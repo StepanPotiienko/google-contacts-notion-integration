@@ -1526,16 +1526,11 @@
                         console.warn('[SSE] Error:', err.message);
                         if (!mapInitialized && !fallbackStarted) {
                             fallbackStarted = true;
-                            // Fallback: stale cache → clients.json
-                            var staleOrStatic = (cached && cached.clients.length > 0)
-                                ? cached.clients : null;
-                            if (staleOrStatic) {
-                                initOnce(staleOrStatic);
+                            // Fallback: використовуємо лише закешовані дані (localStorage).
+                            if (cached && cached.clients.length > 0) {
+                                initOnce(cached.clients);
                             } else {
-                                fetch('clients.json')
-                                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                                    .then(function (data) { initOnce(Array.isArray(data) ? data : []); })
-                                    .catch(function (e) { console.error('[Fallback] clients.json failed:', e); initOnce([]); });
+                                initOnce([]);
                             }
                         }
                     }
