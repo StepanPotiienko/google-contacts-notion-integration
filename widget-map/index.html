@@ -1441,29 +1441,20 @@
                 }); // end map.on('load')
             } // end initMap
 
-            // ── SSE loader ────────────────────────────────────────────────────
+            // ── Loader: read clients from the generated clients.json ─────────
             function streamFromNotion(onBatch, onDone, onError) {
-                var es = new EventSource('/api/notion-clients/stream');
-                es.addEventListener('batch', function (e) {
-                    try { onBatch(JSON.parse(e.data)); }
-                    catch (err) { console.warn('[SSE] Parse error:', err); }
-                });
-                es.addEventListener('done', function (e) {
-                    es.close();
-                    try { onDone(JSON.parse(e.data)); } catch (err) { onDone({}); }
-                });
-                es.addEventListener('error', function (e) {
-                    // Server-emitted error event
-                    es.close();
-                    try { var d = JSON.parse(e.data); onError(new Error(d.message || 'SSE error')); }
-                    catch (err) { onError(new Error('SSE error')); }
-                });
-                es.onerror = function () {
-                    if (es.readyState === EventSource.CLOSED) {
-                        onError(new Error('SSE connection closed'));
-                    }
-                };
-                return es;
+                fetch('clients.json')
+                    .then(function (r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        onBatch(Array.isArray(data) ? data : []);
+                        onDone({ total: Array.isArray(data) ? data.length : 0 });
+                    })
+                    .catch(function (e) {
+                        onError(e);
+                    });
             }
 
             // ── Main orchestration ────────────────────────────────────────────

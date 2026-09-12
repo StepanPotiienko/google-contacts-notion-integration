@@ -16,6 +16,9 @@ concurrency:
   group: notion-dedup
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -91,3 +94,42 @@ jobs:
 
       - name: Push new contacts to Notion
         run: python google-contacts-integration/main.py --phase contacts
+
+      # ── Generate anonymized clients.json for the public map widget ─────────
+      # Runs from Widget Generator Tool/ so notion_utils is importable.
+      # Uses the same Notion DB as the live sync (NOTION_API_KEY in secrets).
+      # The script anonymizes: the file holds only name + coords (no PII).
+      - name: Generate clients.json (anonymized, for map)
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.PRODUCTION_DATABASE_ID }}
+          CLIENTS_JSON_PATH: clients.json
+        run: |
+          cd "Widget Generator Tool"
+          python generate_clients_json.py
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mv -f clients.json "${{ github.workspace }}/clients.json"
+
+      # ── Commit clients.json to the gh-pages branch (where the widget lives) ─
+      - name: Deploy clients.json to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          cd "${{ github.workspace }}"
+          git fetch origin gh-pages
+          git checkout -b deploy-clients origin/gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p widget-map
+          cp -f "${{ github.workspace }}/clients.json" widget-map/clients.json
+          git add -f widget-map/clients.json
+          if git diff --cached --quiet; then
+            echo "clients.json unchanged — skip deploy"
+          else
+            git commit -m "chore: refresh client map data (anonymized)"
+            git push --force \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              deploy-clients:gh-pages
+          fi
+
