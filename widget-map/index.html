@@ -1270,9 +1270,8 @@
 
                     function matchesCountry(c, country) {
                         if (!country) return true;
-                        if (country === '\u0413\u0440\u0443\u0437\u0456\u044f') return c.address && (c.address.includes('Georgia') || c.address.includes('\u0413\u0440\u0443\u0437\u0456\u044f'));
-                        if (country === '\u0423\u043a\u0440\u0430\u0457\u043d\u0430') return !c.address || (!c.address.includes('Georgia') && !c.address.includes('\u0413\u0440\u0443\u0437\u0456\u044f'));
-                        return c.address && c.address.includes(country);
+                        if (country === '\u0413\u0440\u0443\u0437\u0456\u044f') return c.country === 'Грузія' || c.country === 'Georgia';
+                        return c.country === 'Україна' || (!c.country && !c.region);
                     }
 
                     function filterMapByQuery(q) {
@@ -1280,13 +1279,13 @@
                         var region = regionFilter.value;
                         var filtered = allClients.filter(function (c) {
                             var cm = matchesCountry(c, country);
-                            var rm = !region || (c.address && c.address.includes(region));
+                            var rm = !region || c.region === region;
                             return cm && rm;
                         });
                         if (q && q.trim()) {
                             var ql = q.trim().toLowerCase();
                             filtered = filtered.filter(function (c) {
-                                return [c.name, c.address, c.contact, c.phone]
+                                return [c.name, c.region]
                                     .filter(Boolean).join(' ').toLowerCase().indexOf(ql) !== -1;
                             });
                         }
@@ -1298,14 +1297,14 @@
                         suggestionsBox.innerHTML = '';
                         if (!ql) { suggestionsBox.style.display = 'none'; return; }
                         var matches = allClients.filter(function (c) {
-                            return [c.name, c.address, c.contact, c.phone]
+                            return [c.name, c.region]
                                 .filter(Boolean).join(' ').toLowerCase().indexOf(ql) !== -1;
                         }).slice(0, 10);
                         if (!matches.length) { suggestionsBox.style.display = 'none'; return; }
                         matches.forEach(function (client) {
                             var div = document.createElement('div');
                             div.className = 'suggestion-item';
-                            div.textContent = client.name + (client.address ? ' (' + client.address + ')' : '');
+                            div.textContent = client.name + (client.region ? ' (' + client.region + ')' : '');
                             div.addEventListener('click', function () {
                                 map.getSource('clients').setData(fullGeoJSON);
                                 map.flyTo({ center: [client.lng, client.lat], zoom: Math.max(map.getZoom(), 14), essential: true });
