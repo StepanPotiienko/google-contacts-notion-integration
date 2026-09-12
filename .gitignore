@@ -41,3 +41,7 @@ clients_array.js
 refresh_token.txt
 
 .claude/
+
+# Чутливі дані клієнтів — ніколи не публікувати (витік ПДн)
+clients.json
+widget-map/clients.json
