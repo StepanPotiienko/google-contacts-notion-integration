@@ -1134,26 +1134,10 @@
                 var html = '<div style="max-height:300px;overflow-y:auto;">';
                 list.forEach(function (c, i) {
                     html += '<div' + (i > 0 ? ' style="border-top:1px solid #efefef;padding-top:12px;margin-top:12px;"' : '') + '>';
-                    html += '<div class="popup-header">';
                     var title = list.length > 1 ? '(' + (i + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
-                    html += '<div class="popup-name" style="font-weight:600;font-size:14px;margin-bottom:4px;">' + title + '</div>';
-                    if (c.label) {
-                        var safeColor = /^#[0-9a-fA-F]{3,8}$/.test(c.color) ? c.color : '#ef4444';
-                        html += '<div class="popup-label" style="background-color:' + safeColor +
-                            ';font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;display:inline-block;margin-bottom:8px;">' +
-                            escapeHtml(c.label) + '</div>';
-                    }
-                    html += '</div><div class="popup-body" style="font-size:13px;color:#374151;">';
-                    if (c.address) {
-                        html += '<div class="popup-row" style="display:flex;align-items:start;gap:6px;margin-bottom:4px;">'
-                            + '<span style="font-weight:500;">&#128205;</span> '
-                            + '<span class="popup-value">' + escapeHtml(c.address) + '</span></div>';
-                    }
-                    if (c.notes) {
-                        html += '<div class="popup-notes" style="background:#f3f4f6;padding:6px;border-radius:4px;margin-top:6px;font-style:italic;font-size:12px;">'
-                            + escapeHtml(c.notes) + '</div>';
-                    }
-                    html += '</div></div>';
+                    // Show only the client name — no footer/address/notes (PII stripped).
+                    html += '<div class="popup-name" style="font-weight:600;font-size:14px;">' + title + '</div>';
+                    html += '</div>';
                 });
                 return html + '</div>';
             }
