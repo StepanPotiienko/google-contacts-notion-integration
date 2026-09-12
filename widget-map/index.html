@@ -1133,11 +1133,10 @@
             function buildPopupHTML(list) {
                 var html = '<div style="max-height:300px;overflow-y:auto;">';
                 list.forEach(function (c, i) {
-                    html += '<div' + (i > 0 ? ' style="border-top:1px solid #efefef;padding-top:12px;margin-top:12px;"' : '') + '>';
+                    html += '<div class="popup-item"><div class="popup-header">';
                     var title = list.length > 1 ? '(' + (i + 1) + ') ' + escapeHtml(c.name) : escapeHtml(c.name);
-                    // Show only the client name — no footer/address/notes (PII stripped).
-                    html += '<div class="popup-name" style="font-weight:600;font-size:14px;">' + title + '</div>';
-                    html += '</div>';
+                    html += '<div class="popup-name">' + title + '</div>';
+                    html += '</div></div>';
                 });
                 return html + '</div>';
             }
